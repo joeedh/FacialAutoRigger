@@ -2,36 +2,9 @@ import bpy, bmesh
 from mathutils import *
 from math import *
 
-basePositions = [
-  ('MouthUpper',  Vector((0.00944945216178894, -0.8715478777885437, 3.534780979156494))),
-  ('MouthLower',  Vector((0.009449453093111515, -0.7684719562530518, 2.958772897720337))),
-  ('Chin',  Vector((-3.798869219195922e-09, -0.4771777391433716, 2.0261588096618652))),
-  ('Nose',  Vector((-0.009447156451642513, -1.2648979425430298, 4.233251571655273))),
-  ('MouthCorner.L',  Vector((-0.9173001646995544, -0.21365341544151306, 3.1923158168792725))),
-  ('LidLeft.L',  Vector((-0.48834308981895447, -0.1588311493396759, 4.9903974533081055))),
-  ('LidRight.L',  Vector((-1.758155107498169, 0.1618182361125946, 5.14287805557251))),
-  ('LidBottom.L',  Vector((-1.261229395866394, -0.0738702192902565, 4.661858558654785))),
-  ('LidTop.L',  Vector((-1.0560321807861328, -0.1528165638446808, 5.427489757537842))),
-  ('BrowLeft.L',  Vector((-0.20194929838180542, -0.4066941738128662, 5.945296287536621))),
-  ('BrowRight.L',  Vector((-1.8342204093933105, 0.026495549827814102, 6.057717323303223))),
-  ('Jawline.L',  Vector((-1.3824844360351562, 0.32070180773735046, 2.733058214187622))),
-  ('Ear.L',  Vector((-2.510045051574707, 1.6904290914535522, 4.1867547035217285))),
-  ('JawHinge.L',  Vector((-2.0363929271698, 1.0894230604171753, 3.1793951988220215))),
-  ('Forehead.L',  Vector((-0.6915662884712219, -0.142640620470047, 6.796550273895264))),
-  ('Forehead.R',  Vector((0.6915662884712219, -0.142640620470047, 6.796550273895264))),
-  ('MouthCorner.R',  Vector((0.9173001646995544, -0.21365341544151306, 3.1923158168792725))),
-  ('LidLeft.R',  Vector((0.48834308981895447, -0.1588311493396759, 4.9903974533081055))),
-  ('LidRight.R',  Vector((1.758155107498169, 0.1618182361125946, 5.14287805557251))),
-  ('LidBottom.R',  Vector((1.261229395866394, -0.0738702192902565, 4.661858558654785))),
-  ('LidTop.R',  Vector((1.0560321807861328, -0.1528165638446808, 5.427489757537842))),
-  ('BrowLeft.R',  Vector((0.20194929838180542, -0.4066941738128662, 5.945296287536621))),
-  ('BrowRight.R',  Vector((1.8342204093933105, 0.026495549827814102, 6.057717323303223))),
-  ('Jawline.R',  Vector((1.3824844360351562, 0.32070180773735046, 2.733058214187622))),
-  ('Ear.R',  Vector((2.510045051574707, 1.6904290914535522, 4.1867547035217285))),
-  ('JawHinge.R',  Vector((2.0363929271698, 1.0894230604171753, 3.1793951988220215))),
-  ('Eye.R',  Vector((1.1010305881500244, 1.0515440702438354, 5.223787307739258))),
-  ('Eye.L',  Vector((-1.1010305881500244, 1.0515440702438354, 5.223787307739258))),
-]
+from .data import basePositions;
+from .utils import getMeshObject, DAGSortBones
+from .cage import makeDeformMesh
 
 def genBasePositions(meta):
     arm = meta.data
@@ -54,448 +27,29 @@ def genBasePositions(meta):
     
     print("\n", buf, "\n")
     return buf
-
-    
-def getMeshObject(name):
-    if name not in bpy.data.objects:
-        ob = bpy.data.objects.new(name, bpy.data.meshes.new(name))
-        cll = bpy.context.scene.collection
-        cll.objects.link(ob)
-
-    return bpy.data.objects[name]
-    
-def setWidgetShapes(ob):
-    widget = bpy.data.objects["MetaFaceWidget"]
-    for bone in ob.pose.bones:
-        bone.custom_shape = widget
-        bone.use_custom_shape_bone_size = False
-        if bone.name in ob.data.bones:
-            ob.data.bones[bone.name].show_wire = True
         
-def makeDeformMesh(meta):
-    ob = getMeshObject("_" + meta.name + "cage")
-    
-    ob.location = meta.matrix_world @ Vector()
-    
-    arm = meta.data
-    pose = meta.pose
-    
-    setWidgetShapes(meta)
-    bases = {}
-    for name, loc in basePositions:
-        bases[name] = loc
-        
-    def bloc(name):
-        if name not in bases:
-            print("Error: missing bone in armature data: ", name)            
-            return Vector()
-        
-        return bases[name]
-        """
-        loc = arm.bones[name].head
-        loc = pose.bones[name].matrix_channel @ loc
-        return loc
-        #"""
-        
-    bm = bmesh.new()
-    vsmap = {}
-    swapside = False
-    
-    def bvert(name, no_swap=False):
-        if swapside and not no_swap and name.endswith(".R"):
-            name = name[:-2] + ".L"
-            
-        if name in vsmap:
-            return vsmap[name]
-        vsmap[name] = bm.verts.new(bloc(name))
-        
-        return vsmap[name]
-
-        
-    bound = [
-        Vector([100000, 100000, 100000]),
-        -Vector([100000, 100000, 100000]),
-    ];
-    
-    tops = []
-    backs = []
-    temples = []
-    jawmids = []
-    
-    for i in range(2):
-        swapside = i == 0
-
-        if i == 1:
-            bmesh.ops.reverse_faces(bm, faces=bm.faces)
-            
-        print(bloc("LidLeft.R"))
-        eye = [
-            bvert("LidLeft.R"),
-            bvert("LidTop.R"),
-            bvert("LidRight.R"),
-            bvert("LidBottom.R")
-        ]
-        
-        eye.reverse()
-        
-        bm.faces.new(eye)
-        
-        brow = [
-            bvert("BrowRight.R"),
-            bvert("BrowRight.L")
-        ]
-        
-        forehead = bvert("Forehead.R")
-        
-        if 1:
-            bm.faces.new([
-                bvert("LidTop.R"),
-                bvert("BrowRight.R"),
-                bvert("BrowLeft.R"),
-                bvert("LidLeft.R"),
-
-            ])
-
-        
-        bm.faces.new([
-            bvert("LidRight.R"),
-            bvert("BrowRight.R"),
-            bvert("LidTop.R"),
-        ]);
-        
-        
-        #bm.faces.new([
-        #    bvert("Nose"),
-        #    bvert("LidBottom.R"),
-        #    bvert("LidLeft.R"),
-        #])
-        
-        ear = bvert("Ear.R");
-        temple = Vector(ear.co)
-        temple[2] = bvert("Forehead.R").co[2]
-        temple = bm.verts.new(temple)
-        
-        temples.append(temple)
-        
-        bm.faces.new([
-            bvert("BrowRight.R"),
-            temple,
-            bvert("Forehead.R"),
-            bvert("BrowLeft.R"),
-            ])
-        
-        bm.faces.new([
-            bvert("LidRight.R"),
-            ear,
-            temple,
-            bvert("BrowRight.R"),
-        ])
-        
-        
-        cheek = Vector(bvert("Jawline.R").co)
-        cheek += (bvert("LidBottom.R").co - cheek)*0.6
-        cheek = bm.verts.new(cheek)
-        #"""
-        
-        bm.faces.new([
-            bvert("LidBottom.R"),
-            cheek,
-            ear,
-            bvert("LidRight.R"),
-
-        ])
-        #"""
-            
-        bm.faces.new([
-            bvert("Nose"),
-            bvert("MouthUpper"),
-            bvert("MouthCorner.R"),
-            cheek
-            #bvert("Jawline.R"),
-        ]);
-        
-        #"""
-        bm.faces.new([
-            cheek,
-            bvert("LidBottom.R"),
-            bvert("LidLeft.R"),
-            bvert("Nose"),
-        ])
-        
-        bm.faces.new([
-            bvert("MouthUpper"),
-            bvert("MouthCorner.R"),
-            bvert("MouthLower")
-        ]);
-        
-        jawmid = Vector(bvert("Chin").co)
-        y = jawmid[1]
-        y += (bvert("JawHinge.R").co[1] - y)*0.33
-        
-        jawmid += (bvert("JawHinge.R").co - jawmid)*0.5
-        jawmid[1] = y
-        jawmid = bm.verts.new(jawmid)
-        
-        jawmids.append(jawmid)
-        
-        bm.faces.new([
-            jawmid,
-            bvert("MouthCorner.R"),
-            bvert("MouthLower"),
-            bvert("Chin"),
-        ])
-        
-        #"""
-        bm.faces.new([
-            #bvert("JawHinge.R"),
-            bvert("Jawline.R"),
-            #bvert("Ear.R"),
-            cheek,
-            bvert("MouthCorner.R"),
-            jawmid,
-        ])
-        #"""
-        
-        bm.faces.new([
-           bvert("Ear.R"),
-           cheek,
-           bvert("Jawline.R"), 
-        ])
-                
-        bm.faces.new([
-            bvert("JawHinge.R"),
-            bvert("Ear.R"),
-            bvert("Jawline.R"),
-            
-        ])
-        
-        earco = bvert("Ear.R").co
-        y = earco[1]
-
-        #back faces
-        
-        #estimate back of head
-        if i == 0:
-            for v in bm.verts:
-                for i in range(3):
-                    bound[0][i] = min(bound[0][i], v.co[i])
-                    bound[1][i] = max(bound[1][i], v.co[i])
-            
-        size = bound[1] - bound[0]
-        backy = bound[0][1] + size[1]*1.75;
-        
-        backyclose = bound[0][1] + size[1]*0.1;
-        
-        #make verts
-        back1 = Vector(bvert("JawHinge.R").co)
-        back1[1] -= backyclose
-        back1 = bm.verts.new(back1)
-        
-        back2 = Vector(bvert("Ear.R").co)
-        back2[1] -= backyclose
-        back2 = bm.verts.new(back2)
-        
-        back3 = Vector(bvert("JawHinge.R").co)
-        back3[0] *= 0.75
-        back3[1] = backy
-        back3 = bm.verts.new(back3)
-        
-        back4 = Vector(bvert("Ear.R").co)
-        back4[0] *= 0.75
-        back4[1] = backy
-        back4 = bm.verts.new(back4)
-        
-        bm.faces.new([
-            back1, 
-            back2,
-            bvert("Ear.R"),
-            bvert("JawHinge.R"),
-            
-        ]);
-        
-        back5 = Vector(bvert("Forehead.R").co)
-        back5[1] = backy
-        back5[0] = temple.co[0]
-        back5 = bm.verts.new(back5)
-        
-        #"""
-        bm.faces.new([
-            back2,
-            back5,
-            temple,
-            bvert("Ear.R"),
-            #bvert("Forehead.R"),
-        ])
-        
-        bm.faces.new([
-            back5, 
-            back2,
-            back4
-        ])
-        #"""
-        bm.faces.new([back1, back3, back4, back2])
-        
-        back6 = Vector(bvert("Forehead.R").co)
-        back6 = (back6 + bvert("Forehead.L").co)*0.5
-        back6[2] += size[2]*0.4;
-        back6[1] = backy - size[1]*0.25
-        back6 = bm.verts.new(back6)
-        
-        
-        bm.faces.new([
-            back6,
-            bvert("Forehead.R"),
-            temple,
-        ]);
-        bm.faces.new([
-            back6,
-            temple,
-            back5
-        ]);
-        
-        tops.append(back6)
-        back = [
-            None, 
-            back1,
-            back2,
-            back3,
-            back4,
-            back5,
-            back6
-        ]
-        backs.append(back)
-    
-    swapside = False
-    
-    bm.faces.new([
-        bvert("Forehead.L"),        
-        bvert("Forehead.R"),
-        tops[1],
-        tops[0],
-    ]);
-    
-    backmid = bound[0] + Vector([
-        size[0]*0.5,
-        size[1]*2.0,
-        bvert("Chin").co[2],
-    ])
-    backmid2 = bound[0] + Vector([
-        size[0]*0.5,
-        size[1]*2.4,
-        bvert("Chin").co[2]+size[2]*0.33,
-    ])
-    backmid = bm.verts.new(backmid)
-    neckmid = bound[0] + Vector([
-        size[0],
-        size[1]*1.1,
-        bvert("Chin").co[2] - size[2]*0.65
-    ])
-    
-    #"""
-    f = bm.faces.new([
-        tops[1],
-        backs[1][5],
-        backs[1][4],
-        backs[1][3],
-        backmid,
-        backs[0][3],
-        backs[0][4],
-        backs[0][5],
-        tops[0]
-    ])
-    ret = bmesh.ops.extrude_discrete_faces(bm, faces=[f])
-    f = ret["faces"][0]
-    for v in f.verts:
-        v.co += (backmid2 - v.co)*0.25
-    bmesh.ops.triangulate(bm, faces=[f])        
-    #"""
-    
-    f = bm.faces.new([
-        backmid,
-#        backs[1][4],
-        backs[1][3], 
-        backs[1][1],
-        bvert("JawHinge.R"),
-        bvert("Jawline.R"),
-        jawmids[1],
-        bvert("Chin"),
-        jawmids[0],
-        bvert("Jawline.L"),
-        bvert("JawHinge.L"),
-        backs[0][1],
-        backs[0][3],
-    ])
-    
-    ret = bmesh.ops.extrude_discrete_faces(bm, faces=[f])
-    f = ret["faces"][0]
-    for v in f.verts:
-        v.co += (neckmid - v.co)*0.5
-    bmesh.ops.triangulate(bm, faces=[f])        
-    
-    #some final middle faces
-    #"""
-    bm.faces.new([
-        bvert("BrowLeft.L", True),
-        bvert("BrowLeft.R", True),
-        bvert("Forehead.R", True),
-        bvert("Forehead.L", True),
-    ])
-    #"""
-    
-    bm.faces.new([
-        bvert("LidLeft.L", True),
-        bvert("LidLeft.R", True),
-        bvert("BrowLeft.R", True),
-        bvert("BrowLeft.L", True),
-    ])
-    
-    bm.faces.new([
-        bvert("Nose"),
-        bvert("LidLeft.R", True),
-        bvert("LidLeft.L", True),
-    ]);
-    
-    #make sure we have everything
-    for bone in meta.pose.bones:
-        bvert(bone.name)
-        pass
-    
-    bm.normal_update()
-    eps = 0.05*max(max(size[0], size[1]), size[2])
-
-    for v in bm.verts:
-        v.co += v.normal*eps
-    
-    bm.verts.index_update()
-    
-    vmap = {}
-    for k in vsmap:
-        vmap[k] = vsmap[k].index
-        
-    bm.to_mesh(ob.data)
-    ob.data.update()
-    
-    return ob, vmap, eps
-
 def deformRig(meta, newrig, oldrig):
-    ob, vimap, inflate = makeDeformMesh(meta)
+    basePositions2 = []
     
+    for name, loc0 in basePositions:
+        bone = meta.data.bones[name]
+        pbone = meta.pose.bones[name]
+        
+        loc = Vector(bone.head)
+        loc = pbone.matrix_channel @ loc
+        
+        basePositions2.append((name, loc))
+    
+    ob, vimap, inflate = makeDeformMesh(meta, basePositions, "base", oldrig)
+    targetob, targetvimap, targetinflate = makeDeformMesh(meta, basePositions2, "target", oldrig, None)
+    
+    #return
     #the rig insn't technically symmetric
     #should fix, for now make sure auto x-mirror
     #is off
     
-    use_mirror_x = newrig.data.use_mirror_x
-    newrig.data.use_mirror_x = False
-    
     arm = meta.data
     pose = meta.pose
-    
-    setWidgetShapes(meta)
-    
-    def bloc(name):
-        loc = arm.bones[name].head
-        loc = pose.bones[name].matrix_channel @ loc
-        return loc
     
     defob = getMeshObject("_" + meta.name + "_rigdef")
     defob.location = meta.location
@@ -515,16 +69,67 @@ def deformRig(meta, newrig, oldrig):
     #mat = mat @ meta.matrix_world
     #imat = Matrix(mat)
     #imat.invert()
+    
+    boneheads = {}
+    bpy.context.view_layer.objects.active = meta
+    bpy.ops.object.mode_set(mode="EDIT")
+    ebones = meta.data.edit_bones
+    
+    for bone in ebones:
+        boneheads[bone.name] = Vector(bone.head)
+
+    def bloc(name):
+        #print(boneheads)
+        loc = boneheads[name]
+        loc = pose.bones[name].matrix_channel @ loc
+        return loc
+    
+    bpy.ops.object.mode_set(mode="OBJECT")
 
     bpy.context.view_layer.objects.active = newrig
     bpy.ops.object.mode_set(mode="EDIT")
     ebones = newrig.data.edit_bones
+    matlens = {}
     
     for name in bones:
         bone = ebones[name]
+        #make three edges so we can derive a linear transformation
+        
         a = bm2.verts.new(bone.head)
         b = bm2.verts.new(bone.tail)
         bm2.edges.new([a, b])
+        
+        t1 = bone.tail - bone.head
+        t1.normalize()
+        
+        if abs(t1[2]) > abs(t1[1]) and abs(t1[2]) > abs(t1[0]):
+          t2 = Vector([1, 0, 0])
+        else:
+          t2 = Vector([0, 0, 1])
+        
+        t2 = t1.cross(t2)
+        t2.normalize()
+        
+        t3 = t2.cross(t1)
+        t3.normalize()
+        
+        t1 = Vector([1, 0, 0])
+        t2 = Vector([0, 1, 0])
+        t3 = Vector([0, 0, 1])
+        
+        len1 = (bone.tail - bone.head).length*0.001
+        
+        matlens[name] = len1
+        
+        t1 = t1*len1 + a.co
+        t2 = t2*len1 + a.co
+        t3 = t3*len1 + a.co
+        
+        bm2.edges.new([a, bm2.verts.new(t1)])
+        bm2.edges.new([a, bm2.verts.new(t2)])
+        bm2.edges.new([a, bm2.verts.new(t3)])
+        
+        
         #print(bone.name)
         pass
     ebones = None
@@ -551,21 +156,12 @@ def deformRig(meta, newrig, oldrig):
     bm.verts.index_update()
     bm.verts.ensure_lookup_table()
     
-    for name, loc in basePositions:
-        if name not in vimap:
-            print("Error: missing vert map entry for bone " + name);
-            continue
-        
-        loc = bloc(name)
-        
-        vert = vimap[name]
-        v = bm.verts[vert]
-        v.co = loc
-    
-    bm.normal_update()
-
+    bm.verts.index_update()
     for v in bm.verts:
-        v.co += v.normal * inflate
+        v.co = targetob.data.vertices[v.index].co
+        pass
+            
+    bm.normal_update()
         
     bm.to_mesh(ob.data)
     ob.data.update()
@@ -583,11 +179,121 @@ def deformRig(meta, newrig, oldrig):
     bpy.ops.object.mode_set(mode="EDIT")
     ebones = newrig.data.edit_bones
     
+    #linear cage transformation matrices
+    bonemats = {}
+    
     for i, name in enumerate(bones):
         bone = ebones[name]
-        bone.head = bm2.verts[i*2].co
-        bone.tail = bm2.verts[i*2+1].co
+        blen2 = matlens[name]
+        
+        offset = bm2.verts[i*5].co - bone.head;
+        
+        old = Vector(bone.head)
+        oldtail = Vector(bone.tail)
+        bone.head = bm2.verts[i*5].co
+        bone.tail = bm2.verts[i*5+1].co
+        
+        dx = (bm2.verts[i*5+2].co - bone.head) / blen2
+        dy = (bm2.verts[i*5+3].co - bone.head) / blen2
+        dz = (bm2.verts[i*5+4].co - bone.head) / blen2
+        
+        mat = Matrix([
+        [dx[0], dy[0], dz[0]],
+        [dx[1], dy[1], dz[1]],
+        [dx[2], dy[2], dz[2]]
+        ])
+        #mat.transpose();
+        try:
+          pass
+          #mat.invert()
+        except ValueError:
+          print("matrix inversion failure", mat)
+          
+        mat.resize_4x4()
+        
+        #mat = Matrix()
+        #print(mat)
+        bonemats[name] = mat
+        
+        #mat = Matrix.Translation(offset)
+        #print(Matrix.Translation(offset))
+        #print("=====", "\n", mat)
+        
+        #mat.transpose()
+        #mat.invert()
+        #print(dx, dy, dz, mat)
+        #print("\n", mat @ Vector(), "\n", bone.head)
     
+    src_action = bpy.data.actions["FacialPoses"]
+    
+    action = newrig.animation_data.action
+    if action is None or action == src_action:
+      action = src_action.copy()
+    newrig.animation_data.action = action
+    
+    def getpath(bone, property):
+      return 'pose.bones["%s"].%s' % (bone.name, property)
+    
+    def getcurve(action, bone, property, array_index=0):
+      path = getpath(bone, property)
+      
+      srcfc = None
+      for fc in src_action.fcurves:
+        if fc.data_path == path and fc.array_index == array_index:
+          srcfc = fc
+          break
+        
+      if srcfc is None:
+        raise RuntimeError("failed to find source fcurce")
+        
+      for fc in action.fcurves:
+        if fc.data_path == path and fc.array_index == array_index:
+          for i, key in enumerate(fc.keyframe_points):
+            fc.keyframe_points[i].co = srcfc.keyframe_points[i].co
+            
+          return fc
+
+
+    for pbone in newrig.pose.bones:
+      fcx = getcurve(action, pbone, "location", 0)
+      fcy = getcurve(action, pbone, "location", 1)
+      fcz = getcurve(action, pbone, "location", 2)
+      
+      if fcx is None:
+        print("no animation key for bone", pbone.name)
+        continue
+      
+      mat = bonemats[pbone.name]
+      
+      l = len(fcx.keyframe_points)
+      if len(fcy.keyframe_points) != l or len(fcz.keyframe_points) != l:
+        axis = ""
+        if len(fcy.keyframe_points) != l:
+          axis += " 1"
+        if len(fcz.keyframe_points) != l:
+          axis += " 2"
+          
+        print("ERROR missing axis keyframe data for axis" + axis)
+        print(len(fcx.keyframe_points), len(fcy.keyframe_points), len(fcz.keyframe_points))
+      
+      #continue
+      kx = fcx.keyframe_points
+      ky = fcy.keyframe_points
+      kz = fcz.keyframe_points
+      
+      for i in range(len(kx)):
+        co = Vector([kx[i].co[1], ky[i].co[1], kz[i].co[1]])
+        #print(co, co - (mat @ co))
+        co = mat @ co
+        
+        kx[i].co[1] = co[0]
+        ky[i].co[1] = co[1]
+        kz[i].co[1] = co[2]
+      
+      fcx.update()
+      fcy.update()
+      fcz.update()
+      
     for i in range(len(newrig.data.layers)):
         newrig.data.layers[i] = True
         
@@ -599,80 +305,122 @@ def deformRig(meta, newrig, oldrig):
     #bpy.ops.object.mode_set(mode="POSE")
     #bpy.context.view_layer.objects.active = defob
     
-    #set to rest pose frame, 0
-    bpy.context.scene.frame_set(0)
-    
-    bpy.ops.object.mode_set(mode="POSE")
-    bpy.ops.pose.select_all(action="DESELECT")
-    
-    influences = {}
-    def getkey(bone, con):
-        return bone.name + "_" + con.name
-    
-    for stepi in range(3):
-        break
-        for pbone in newrig.pose.bones:
-            for con in pbone.constraints:
-                key1 = getkey(pbone, con)
-                ctx = {
-                    "object" : newrig,
-                    "constraint" : con,
-                    "active_object" : newrig,
-                    "active_pose_bone" : pbone,
-                    "active_bone" : newrig.data.bones[pbone.name]
-                }
-            
-                if con.type == "STRETCH_TO":
-                    bpy.ops.constraints.stretchto_reset(ctx)
-                    
-                if con.type == "CHILD_OF":
-                    print("  -> doing child of for bone", pbone.name)
-                    
-                    if key1 not in influences:
-                        influences[key1] = con.influence
-                        con.influence = 1.0
-                    
-                    ctx = {
-                        "object" : newrig,
-                        "constraint" : con,
-                        "active_object" : newrig,
-                        "active_pose_bone" : pbone,
-                        "active_bone" : newrig.data.bones[pbone.name]
-                    }
-                    
-                    #if 1:
-                    try:
-                        print(stepi, con.name)
-                        bpy.ops.constraint.childof_clear_inverse(ctx, constraint=con.name, owner="BONE")
-                    
-                        for i in range(1):
-                            bpy.ops.constraint.childof_set_inverse(ctx, constraint=con.name, owner="BONE")
-                    except RuntimeError:
-                        print("failed to reset child of constraint for " + pbone.name)
-                        
-                    #bpy.ops.constraint.childof_set_inverse(ctx, constraint=con.name, owner="BONE")
-                    
-                    con.influence = fac
-    for pbone in newrig.pose.bones:
-        for con in pbone.constraints:
-            key1 = getkey(pbone, con)
-            if key1 in influences:
-                con.influence = influences[key1]
-                
-    bpy.ops.object.mode_set(mode="OBJECT")
-    newrig.data.use_mirror_x = use_mirror_x
-    
-    bpy.data.objects.remove(defob)
-    bpy.data.objects.remove(ob)
-    
-#meta = bpy.context.object
-meta = bpy.data.objects["MetaFaceRig.001"]
-internal_rig = bpy.data.objects["InternalFaceRig"]
+def updateConstraints(newrig, rest_frame=0):
+  dgraph = bpy.context.evaluated_depsgraph_get()
+  
+  #set to rest pose frame
+  bpy.context.scene.frame_set(rest_frame)
+  #newrig.data.pose_position = "REST"
+  newrig.data.update_tag()
+  
+  bpy.context.view_layer.objects.active = newrig
+  bpy.ops.object.mode_set(mode="POSE")
+  bpy.ops.pose.select_all(action="DESELECT")
+  
+  influences = {}
+  def getkey(bone, con):
+      return bone.name + "_" + con.name
 
-def copyRig(rig):
+  pbones = newrig.pose.bones
+  abones = newrig.data.bones
+
+  def do_update():
+      newrig.update_tag(refresh=set(["OBJECT", "DATA", "TIME"]))
+      newrig.data.update_tag()
+      bpy.context.view_layer.update()
+      
+      evalrig = newrig.evaluated_get(dgraph)
+      evalpose = evalrig.pose
+      return evalrig, evalpose
+  
+  sortnames = DAGSortBones(newrig)
+  #print("--->", len(sortnames), len(newrig.pose.bones), len(newrig.data.bones))
+  for stepi in range(4):
+      do_update()
+      
+      for name in sortnames:
+          pbone = newrig.pose.bones[name]
+          abone = newrig.data.bones[pbone.name]
+          newrig.data.bones.active = abone
+          
+          for con in pbone.constraints:
+              if con.type == "STRETCH_TO": # and stepi == 0:
+                  #print("Reseted stretch to", con.rest_length, "for", pbone.name)
+                  
+                  target = con.subtarget
+                  if target not in pbones:
+                    print("bad constraint target", target, "for stretchto of", pbone.name)
+                    continue
+                   
+                  abone2 = abones[target] 
+                  pbone2 = pbones[target]
+                  
+                  a = pbone2.matrix @ Vector()
+                  b = pbone.matrix @ Vector()
+                  
+                  
+                  #l = (abone2.head - abone.head).length
+                  l = (a - b).length
+                  con.rest_length = l
+                  do_update()
+              
+              #do child of constraints after first pass
+              if stepi == 0:
+                continue
+                
+              if con.type == "CHILD_OF":
+                  #print("  -> doing child of for bone", pbone.name)
+                  
+                  key1 = getkey(pbone, con)
+                  if key1 not in influences:
+                      influences[key1] = con.influence
+                      con.influence = 1.0
+                  
+                  evalrig, evalpose = do_update()
+
+                  if con.subtarget not in pbones:
+                    print("missing child off target bone '%s'" % (con.subtarget))
+                    continue
+                    
+                  pmat = evalpose.bones[con.subtarget].matrix
+                  #mymat = abone.convert_local_to_pose(pmat, abone.matrix_local)
+                  
+                  parent = Matrix(pmat)
+                  #parent = Matrix(mymat)
+                  
+                  try:
+                    parent.invert()
+                  except ValueError:
+                    print(parent, "lacks an inverse")
+                    parent = Matrix(abone.matrix_local)
+                    parent.invert()
+                    
+                    continue
+                  #parent = Matrix(abone.matrix_local)
+                  #parent.invert()
+                  
+                  #print(parent)
+                  con.inverse_matrix = parent
+                  
+ 
+  for pbone in newrig.pose.bones:
+      for con in pbone.constraints:
+          key1 = getkey(pbone, con)
+          if key1 in influences:
+              con.influence = influences[key1]
+              
+  newrig.data.pose_position = "POSE"
+  bpy.ops.object.mode_set(mode="OBJECT")
+  do_update()
+  
+    #bpy.data.objects.remove(defob)
+    #bpy.data.objects.remove(ob)
+    
+
+def copyRig(rig, name):
     #copy rig
-    rigob = internal_rig
-    newname = "My" + rigob.name
+    rigob = rig
+    newname = name
             
     bpy.ops.object.select_all(action="DESELECT")
 
@@ -682,12 +430,12 @@ def copyRig(rig):
     }
     
     ret = bpy.ops.object.duplicate(ctx, mode="DUMMY")
-    print(ret)
-    print(ctx)
-    print(bpy.context.active_object)
+    #print(ret)
+    #print(ctx)
+    #print(bpy.context.active_object)
     
     rig2 = bpy.context.selected_objects[0]
-    print(rig2)
+    #print(rig2)
     
     if newname in bpy.data.objects:
         rig3 = bpy.data.objects[newname]
@@ -697,15 +445,24 @@ def copyRig(rig):
         
         for p in rig2.pose.bones:
             #XXX FOR TESTING PURPOSES always regen; change back later
-            if p.name not in rig3.pose.bones:
+            if 1: #p.name not in rig3.pose.bones:
                 print("missing bone; full regen")
                 bad = True
                 break
             #TODO
             #hrm, what to sync?
         if bad:
+            #relink modifiers
+            for ob in bpy.data.objects:
+              if ob.type != "MESH": continue
+              for mod in ob.modifiers:
+                if not hasattr(mod, "object"): continue
+                if mod.object != rig3: continue
+                mod.object = rig2
+                
             bpy.data.objects.remove(rig3)
             rig2.name = newname
+            #relink armature modifiers
         else:
             bpy.data.objects.remove(rig2)
             rig2 = rig3
@@ -715,8 +472,35 @@ def copyRig(rig):
         rig2.name = newname
     
     return rig2    
-    
-genBasePositions(bpy.data.objects["MetaFaceRig"])
-newrig = copyRig(internal_rig)
-newrig.location = meta.location
-deformRig(meta, newrig, internal_rig)
+
+
+def genRig(meta, rest_frame=1):
+  oldframe = bpy.context.scene.frame_current
+  
+  internal_rig = bpy.data.objects["InternalFaceRig"]
+      
+  name = "My" + meta.name[4:]
+
+  newrig = copyRig(internal_rig, name)
+  newrig.location = meta.location
+
+  use_mirror_x = newrig.data.use_mirror_x
+  newrig.data.use_mirror_x = False
+
+  deformRig(meta, newrig, internal_rig)
+  updateConstraints(newrig, rest_frame=rest_frame)
+  
+  meta.select_set(True)
+  bpy.context.view_layer.objects.active = newrig
+  
+  newrig.data.use_mirror_x = use_mirror_x
+  
+  bpy.context.scene.frame_set(oldframe)
+  bpy.context.view_layer.update()
+
+def test(meta):    
+  genBasePositions(bpy.data.objects["MetaFaceRig"])
+  genRig(meta)
+
+
+

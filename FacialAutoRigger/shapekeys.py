@@ -2,6 +2,8 @@ import bpy, bmesh
 from mathutils import *
 from math import *
 
+SHAPEKEY_MASK_VGROUPS_NAME = "FaceShapeKeyMirrorMask"
+
 no_vgroup_add = set([
     "JawSide.R", 
     "JawSide.L"
@@ -50,43 +52,56 @@ def get_shapekey(ob, name):
     
     return me.shape_keys.key_blocks[name]
 
-def generate_facial_rig(ob, dgraph, scene):
-    vgname = "FaceShapeKeyMirrorMask"
+def generate_shapekey_masks(ob, dgraph, scene, blend_width=0.05):
+    me = ob.data
+    
+    vgname = SHAPEKEY_MASK_VGROUPS_NAME
+    if vgname not in ob.vertex_groups:
+        ob.vertex_groups.new(name=vgname)
+        
     if vgname + ".R" not in ob.vertex_groups:
-        if vgname + ".R" not in ob.vertex_groups:
-            ob.vertex_groups.new(name=vgname + ".R")
-        if vgname + ".L" not in ob.vertex_groups:
-            ob.vertex_groups.new(name=vgname + ".L")
-        
-        bm = bmesh.new()
-        bm.from_mesh(ob.data)
-        vg = ob.vertex_groups[vgname]
-        vgr = ob.vertex_groups[vgname + ".R"].index
-        vgl = ob.vertex_groups[vgname + ".L"].index
-        
-        mdef = bm.verts.layers.deform.active
+        ob.vertex_groups.new(name=vgname + ".R")
+    if vgname + ".L" not in ob.vertex_groups:
+        ob.vertex_groups.new(name=vgname + ".L")
+    
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    
+    vg = ob.vertex_groups[vgname]
+    vgr = ob.vertex_groups[vgname + ".R"].index
+    vgl = ob.vertex_groups[vgname + ".L"].index
+    
+    mdef = bm.verts.layers.deform.active
 
-        xmin = 1000000
-        xmax = -1000000
-        for v in bm.verts:
-            xmin = min(v.co[0], xmin)
-            xmax = max(v.co[0], xmax)
+    xmin = 1000000
+    xmax = -1000000
+    for v in bm.verts:
+        xmin = min(v.co[0], xmin)
+        xmax = max(v.co[0], xmax)
+    
+    blend_wid = (xmax - xmin) * blend_width;
+    
+    for v in bm.verts:
+        t = min(max(v.co[0], -blend_wid), blend_wid) / blend_wid;
+        t = t*0.5 + 0.5;
         
-        blend_wid = (xmax - xmin) * 0.025;
-        
-        for v in bm.verts:
-            t = min(max(v.co[0], -blend_wid), blend_wid) / blend_wid;
-            t = t*0.5 + 0.5;
-            
-            v[mdef][vgr] = t
-            v[mdef][vgl] = 1.0 - t
-            #print(v[mdef][vgi])
-            #break
-        
-        bm.to_mesh(ob.data)
-        ob.data.update()
-        #return
-        
+        v[mdef][vgr] = t
+        v[mdef][vgl] = 1.0 - t
+        #print(v[mdef][vgi])
+        #break
+    
+    bm.to_mesh(ob.data)
+    ob.data.update()
+
+    return vgname
+  
+def generate_facial_rig(ob, dgraph, scene):
+    me = ob.data
+    
+    vgname = SHAPEKEY_MASK_VGROUPS_NAME
+    if vgname + ".R" not in ob.vertex_groups:
+      generate_shapekey_masks(ob, dgraph, scene)
+      
     startframe = scene.frame_current
     
     was_muted = {}
@@ -119,6 +134,8 @@ def generate_facial_rig(ob, dgraph, scene):
 
         data = skey.data
         
+        print("Doing key", k)
+        
         #if we're the first (basis) key, 
         #build correction offsets for armature
         #deformation in rest post (which is frame zero).
@@ -143,12 +160,13 @@ def generate_facial_rig(ob, dgraph, scene):
     scene.frame_set(startframe)        
     
 
-ob = bpy.context.object
-me = ob.data
-bm = bmesh.new()
-bm.from_mesh(me)
+def __test__():
+  ob = bpy.context.object
+  me = ob.data
+  bm = bmesh.new()
+  bm.from_mesh(me)
 
-dgraph = bpy.context.evaluated_depsgraph_get()
-scene = bpy.context.scene
+  dgraph = bpy.context.evaluated_depsgraph_get()
+  scene = bpy.context.scene
 
-generate_facial_rig(ob, dgraph, scene)
+  generate_facial_rig(ob, dgraph, scene)
