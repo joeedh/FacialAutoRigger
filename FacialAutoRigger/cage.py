@@ -6,7 +6,117 @@ from mathutils.bvhtree import *
 from .data import basePositions;
 from .utils import getMeshObject, setWidgetShapes
 
+def getTangentSimple(f):
+  vs = list(f.verts)
+  
+  t1 = vs[1].co - vs[0].co
+  scale = (vs[1].co - vs[0].co).length
+  
+  t1 = t1.cross(f.normal)
+  t1.normalize()
+  
+  t1 *= scale
+  
+  t2 = f.normal.cross(t1)
+  t2.normalize()
+  t2 *= scale
+  
+  t3 = Vector(f.normal)
+  t3.normalize()
+  t3 *= scale
+  
+  off = (vs[0].co + vs[1].co + vs[2].co) / 3.0
 
+  mat = Matrix([
+    [t1[0], t2[0], t3[0], off[0]],
+    [t1[1], t2[1], t3[1], off[1]],
+    [t1[2], t2[2], t3[2], off[2]],
+    [0, 0, 0, 1],
+  ])
+  
+  #mat.transpose()
+  #mat.invert()
+  #mat.invert()
+  
+  return mat
+  
+def simpleMeshDeformBind(cagebm, bm, eps=0.001):
+  bvh = BVHTree.FromBMesh(cagebm, epsilon=eps)
+  cagebm.faces.ensure_lookup_table()
+  cagebm.normal_update()
+  
+  bm.verts.index_update()
+  bindcos = {}
+  
+  for v in bm.verts:
+    ret = bvh.find_nearest(v.co)
+    
+    if ret[0] is None: 
+      print("simpleMeshDeformBind bind error")
+      continue
+    
+    loc, normal, index, distance = ret
+    
+    f = cagebm.faces[index]
+    mat = getTangentSimple(f)
+    
+    mat.invert()
+    bindcos[v.index] = (index, mat @ v.co)
+  
+  return bindcos
+
+def simpleMeshDeformDeform(cagebm, bm, bindcos):
+  cagebm.faces.ensure_lookup_table()
+  cagebm.normal_update()
+  
+  for v in bm.verts:
+    index, loc = bindcos[v.index]
+    
+    f = cagebm.faces[index]
+    mat2 = getTangentSimple(f)
+    
+    v.co = mat2 @ loc
+    
+  
+def testSimpleMeshDeform(rot_fac=1.0, scale_fac=1.0):
+  import random
+  
+  bm = bmesh.new()
+  ob = getMeshObject("testSimpleMeshDeform_cage")
+  
+  bmesh.ops.create_cube(bm, size=2)
+  bm.normal_update();
+  
+  bm2 = bmesh.new()
+  bmesh.ops.create_monkey(bm2)
+  bm2.normal_update();
+  
+  ob2 = getMeshObject("testSimpleMeshDeform_deform")
+  
+  eul = Euler([rot_fac*random.random()*pi*2, rot_fac*random.random()*pi*2, rot_fac*random.random()*pi*2])
+  rmat = eul.to_matrix()
+  
+  bindcos = simpleMeshDeformBind(bm, bm2)
+  for v in bm.verts:
+    for i in range(3):
+      #v.co[i] += (random.random()-0.5)*0.5
+      v.co = rmat @ v.co
+      v.co *= scale_fac
+      
+  bm.normal_update()
+  
+  simpleMeshDeformDeform(bm, bm2, bindcos)
+  
+  bm.to_mesh(ob.data)
+  ob.data.update()
+  
+  bm2.to_mesh(ob2.data)
+  ob2.data.update()
+  
+  ob.select_set(True)
+  ob2.select_set(True)
+  
+  
 def fixCage(bm, inside_points, eps=0.001):
   bvh = BVHTree.FromBMesh(bm, eps)
   
@@ -466,8 +576,18 @@ def makeDeformMesh(meta, basePositions, prefix, internal_rig, inflate=None):
     
     #"""
     ret = bmesh.ops.extrude_face_region(bm, geom=fs)
-    print(ret)
     
+    for f in fs:
+      bm.faces.remove(f)
+    for e in bm.edges[:]:
+      if len(e.link_faces) == 0:
+        bm.edges.remove(e)
+    for v in bm.verts[:]:
+      if len(v.link_edges) == 0:
+        bm.verts.remove(v)
+        
+    print(list(ret.keys()))
+    print("====================================================")
     for f in ret["geom"]:
       if type(f) != bmesh.types.BMFace:
         continue
@@ -566,7 +686,7 @@ def makeDeformMesh(meta, basePositions, prefix, internal_rig, inflate=None):
     ret = bmesh.ops.subdivide_edges(bm, edges=bm.edges, cuts=2, use_grid_fill=True)
     vs2 = []
     
-    print("=============", ret.keys())
+    #print("=============", ret.keys())
     for v in ret["geom"]:
       if type(v) != bmesh.types.BMVert:
         continue
@@ -578,6 +698,9 @@ def makeDeformMesh(meta, basePositions, prefix, internal_rig, inflate=None):
     for step in range(1):
       bmesh.ops.smooth_vert(bm, verts=vs2, factor=0.75, use_axis_x=True, use_axis_y=True, use_axis_z=True)
     #"""
+    
+    #bmesh.ops.triangulate(bm, faces=bm.faces)
+    bm.normal_update()
     
     bm.to_mesh(ob.data)
     ob.data.update()

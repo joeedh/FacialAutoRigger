@@ -4,7 +4,7 @@ from math import *
 
 from .data import basePositions;
 from .utils import getMeshObject, DAGSortBones
-from .cage import makeDeformMesh
+from .cage import makeDeformMesh, simpleMeshDeformBind, simpleMeshDeformDeform
 
 def genBasePositions(meta):
     arm = meta.data
@@ -28,7 +28,7 @@ def genBasePositions(meta):
     print("\n", buf, "\n")
     return buf
         
-def deformRig(meta, newrig, oldrig):
+def deformRig(meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=False):
     basePositions2 = []
     
     for name, loc0 in basePositions:
@@ -42,6 +42,21 @@ def deformRig(meta, newrig, oldrig):
     
     ob, vimap, inflate = makeDeformMesh(meta, basePositions, "base", oldrig)
     targetob, targetvimap, targetinflate = makeDeformMesh(meta, basePositions2, "target", oldrig, None)
+    
+    for i in range(2):
+      #i = 1
+      ob2 = ob if i else targetob
+      eps = inflate if i else targetinflate
+      
+      bm = bmesh.new()
+      bm.from_mesh(ob2.data)
+      
+      for v in bm.verts:
+        v.co += v.normal*eps*margin
+      
+      bm.to_mesh(ob2.data)
+      ob2.data.update()
+      #break
     
     #return
     #the rig insn't technically symmetric
@@ -142,23 +157,36 @@ def deformRig(meta, newrig, oldrig):
     defob.data.update()
     
     defob.modifiers.clear()
-    mod = defob.modifiers.new("_MeshDeform", "MESH_DEFORM")
-    mod.object = ob
-    
-    bpy.ops.object.meshdeform_bind({
-        "object" : defob,
-        "active_object" : defob
-    }, modifier="_MeshDeform")
-    
+    if not use_surface_def:
+      mod = defob.modifiers.new("_MeshDeform", "MESH_DEFORM")
+      mod.object = ob
+      bpy.ops.object.meshdeform_bind({
+          "object" : defob,
+          "active_object" : defob,
+          "modifier" : "_MeshDeform"
+      }, modifier="_MeshDeform")
+      #"""
     
     bm = bmesh.new()
     bm.from_mesh(ob.data)
+    
+    defbm = bmesh.new()
+    defbm.from_mesh(defob.data)
+    defbm.verts.index_update()
+    
+    if use_surface_def:
+      bm.normal_update()
+      #bmesh.ops.subdivide_edges(defbm, edges=defbm.edges, cuts=32, use_grid_fill=True)
+      bindcos = simpleMeshDeformBind(bm, defbm)
+    
     bm.verts.index_update()
     bm.verts.ensure_lookup_table()
     
-    bm.verts.index_update()
     for v in bm.verts:
-        v.co = targetob.data.vertices[v.index].co
+        co2 = targetob.data.vertices[v.index].co
+        #v.co += (co2 - v.co)*0.5
+        v.co = co2
+        
         pass
             
     bm.normal_update()
@@ -168,8 +196,20 @@ def deformRig(meta, newrig, oldrig):
     
     dgraph = bpy.context.evaluated_depsgraph_get()
     
-    bm2 = bmesh.new()
-    bm2.from_object(defob, dgraph, deform=True, cage=True)
+    if not use_surface_def:
+      bm2 = bmesh.new()
+      bm2.from_object(defob, dgraph, deform=True, cage=True)
+    else:
+      bm2 = defbm.copy()
+      bm2.verts.index_update()
+      
+      simpleMeshDeformDeform(bm, bm2, bindcos)
+      
+      bm2.to_mesh(defob.data)
+      defob.data.update()
+    
+    #bm2 = bmesh.new()
+    #bm2.from_object(defob, dgraph, deform=True, cage=True)
     
     #for i, v in bm.verts:
     
@@ -178,6 +218,7 @@ def deformRig(meta, newrig, oldrig):
     
     bpy.ops.object.mode_set(mode="EDIT")
     ebones = newrig.data.edit_bones
+    pbones = newrig.pose.bones
     
     #linear cage transformation matrices
     bonemats = {}
@@ -215,6 +256,14 @@ def deformRig(meta, newrig, oldrig):
         #print(mat)
         bonemats[name] = mat
         
+        pbone = pbones[bone.name]
+        loc, quat, scale = mat.decompose()
+        #scale = (scale[0] + scale[1] + scale[2])/3.0
+        scale = min(min(scale[0], scale[1]), scale[2])
+        
+        #pbone.custom_shape_scale *= scale
+        
+        
         #mat = Matrix.Translation(offset)
         #print(Matrix.Translation(offset))
         #print("=====", "\n", mat)
@@ -224,75 +273,76 @@ def deformRig(meta, newrig, oldrig):
         #print(dx, dy, dz, mat)
         #print("\n", mat @ Vector(), "\n", bone.head)
     
-    src_action = bpy.data.actions["FacialPoses"]
-    
-    action = newrig.animation_data.action
-    if action is None or action == src_action:
-      action = src_action.copy()
-    newrig.animation_data.action = action
-    
-    def getpath(bone, property):
-      return 'pose.bones["%s"].%s' % (bone.name, property)
-    
-    def getcurve(action, bone, property, array_index=0):
-      path = getpath(bone, property)
+    if do_action:
+      src_action = bpy.data.actions["FacialPoses"]
       
-      srcfc = None
-      for fc in src_action.fcurves:
-        if fc.data_path == path and fc.array_index == array_index:
-          srcfc = fc
-          break
+      action = newrig.animation_data.action
+      if action is None or action == src_action:
+        action = src_action.copy()
+      newrig.animation_data.action = action
+      
+      def getpath(bone, property):
+        return 'pose.bones["%s"].%s' % (bone.name, property)
+      
+      def getcurve(action, bone, property, array_index=0):
+        path = getpath(bone, property)
         
-      if srcfc is None:
-        raise RuntimeError("failed to find source fcurce")
-        
-      for fc in action.fcurves:
-        if fc.data_path == path and fc.array_index == array_index:
-          for i, key in enumerate(fc.keyframe_points):
-            fc.keyframe_points[i].co = srcfc.keyframe_points[i].co
-            
-          return fc
-
-
-    for pbone in newrig.pose.bones:
-      fcx = getcurve(action, pbone, "location", 0)
-      fcy = getcurve(action, pbone, "location", 1)
-      fcz = getcurve(action, pbone, "location", 2)
-      
-      if fcx is None:
-        print("no animation key for bone", pbone.name)
-        continue
-      
-      mat = bonemats[pbone.name]
-      
-      l = len(fcx.keyframe_points)
-      if len(fcy.keyframe_points) != l or len(fcz.keyframe_points) != l:
-        axis = ""
-        if len(fcy.keyframe_points) != l:
-          axis += " 1"
-        if len(fcz.keyframe_points) != l:
-          axis += " 2"
+        srcfc = None
+        for fc in src_action.fcurves:
+          if fc.data_path == path and fc.array_index == array_index:
+            srcfc = fc
+            break
           
-        print("ERROR missing axis keyframe data for axis" + axis)
-        print(len(fcx.keyframe_points), len(fcy.keyframe_points), len(fcz.keyframe_points))
-      
-      #continue
-      kx = fcx.keyframe_points
-      ky = fcy.keyframe_points
-      kz = fcz.keyframe_points
-      
-      for i in range(len(kx)):
-        co = Vector([kx[i].co[1], ky[i].co[1], kz[i].co[1]])
-        #print(co, co - (mat @ co))
-        co = mat @ co
+        if srcfc is None:
+          raise RuntimeError("failed to find source fcurce")
+          
+        for fc in action.fcurves:
+          if fc.data_path == path and fc.array_index == array_index:
+            for i, key in enumerate(fc.keyframe_points):
+              fc.keyframe_points[i].co = srcfc.keyframe_points[i].co
+              
+            return fc
+
+
+      for pbone in newrig.pose.bones:
+        fcx = getcurve(action, pbone, "location", 0)
+        fcy = getcurve(action, pbone, "location", 1)
+        fcz = getcurve(action, pbone, "location", 2)
         
-        kx[i].co[1] = co[0]
-        ky[i].co[1] = co[1]
-        kz[i].co[1] = co[2]
-      
-      fcx.update()
-      fcy.update()
-      fcz.update()
+        if fcx is None:
+          print("no animation key for bone", pbone.name)
+          continue
+        
+        mat = bonemats[pbone.name]
+        
+        l = len(fcx.keyframe_points)
+        if len(fcy.keyframe_points) != l or len(fcz.keyframe_points) != l:
+          axis = ""
+          if len(fcy.keyframe_points) != l:
+            axis += " 1"
+          if len(fcz.keyframe_points) != l:
+            axis += " 2"
+            
+          print("ERROR missing axis keyframe data for axis" + axis)
+          print(len(fcx.keyframe_points), len(fcy.keyframe_points), len(fcz.keyframe_points))
+        
+        #continue
+        kx = fcx.keyframe_points
+        ky = fcy.keyframe_points
+        kz = fcz.keyframe_points
+        
+        for i in range(len(kx)):
+          co = Vector([kx[i].co[1], ky[i].co[1], kz[i].co[1]])
+          #print(co, co - (mat @ co))
+          co = mat @ co
+          
+          kx[i].co[1] = co[0]
+          ky[i].co[1] = co[1]
+          kz[i].co[1] = co[2]
+        
+        fcx.update()
+        fcy.update()
+        fcz.update()
       
     for i in range(len(newrig.data.layers)):
         newrig.data.layers[i] = True
@@ -344,6 +394,35 @@ def updateConstraints(newrig, rest_frame=0):
           newrig.data.bones.active = abone
           
           for con in pbone.constraints:
+              if con.type == "LIMIT_DISTANCE":
+                  inf = con.influence
+                  con.influence = 0
+                  do_update()
+                  
+                  #print("Doing limit distance constraint")
+                  #print("Reseted stretch to", con.rest_length, "for", pbone.name)
+                  
+                  target = con.subtarget
+                  if target not in pbones:
+                    print("bad constraint target", target, "for limit-distance for", pbone.name)
+                    continue
+                   
+                  abone2 = abones[target] 
+                  pbone2 = pbones[target]
+                  
+                  a = pbone2.matrix @ Vector()
+                  b = pbone.matrix @ Vector()
+                  
+                  
+                  #l = (abone2.head - abone.head).length
+                  l = (a - b).length
+                  con.distance = l
+                  
+                  con.influence = inf
+                  do_update()
+                  
+                  #print("  distance", l)
+                  
               if con.type == "STRETCH_TO": # and stepi == 0:
                   #print("Reseted stretch to", con.rest_length, "for", pbone.name)
                   
@@ -429,6 +508,7 @@ def copyRig(rig, name):
         "active_object" : rigob,
     }
     
+    rigob.select_set(True)
     ret = bpy.ops.object.duplicate(ctx, mode="DUMMY")
     #print(ret)
     #print(ctx)
@@ -474,12 +554,15 @@ def copyRig(rig, name):
     return rig2    
 
 
-def genRig(meta, rest_frame=1):
+def genShapeKeyRig(meta, rest_frame=1):
   oldframe = bpy.context.scene.frame_current
   
   internal_rig = bpy.data.objects["InternalFaceRig"]
-      
-  name = "My" + meta.name[4:]
+  
+  name = meta.name
+  if name.lower().startswith("meta"):
+    name = name[4:]
+  name = "MyShapeKey" + name
 
   newrig = copyRig(internal_rig, name)
   newrig.location = meta.location
@@ -497,10 +580,75 @@ def genRig(meta, rest_frame=1):
   
   bpy.context.scene.frame_set(oldframe)
   bpy.context.view_layer.update()
+  
+  return newrig
+  
+def generate(meta, meshob):
+  base_rig = bpy.data.objects["FaceRigBase"]
+      
+  name = meta.name
+  if name.lower().startswith("meta"):
+    name = name[4:]
+  name = "My" + name
+  
+  newrig = copyRig(base_rig, name)
+  newrig.location = meta.location
 
-def test(meta):    
-  genBasePositions(bpy.data.objects["MetaFaceRig"])
-  genRig(meta)
+  use_mirror_x = newrig.data.use_mirror_x
+  newrig.data.use_mirror_x = False
 
+  deformRig(meta, newrig, base_rig, do_action=False, margin=0, use_surface_def=True)
+  updateConstraints(newrig, rest_frame=1)
+  
+  
+  
+  #meta.select_set(True)
+  bpy.context.view_layer.objects.active = newrig
+  bpy.ops.object.mode_set(mode="EDIT")
+  
+  #update EyeTarget, which lies outside the cage
+  
+  ebones = newrig.data.edit_bones
+  #print(list(ebones.keys()))
+  ft = ebones["EyeTarget"]
+  
+  eye1 = ebones["Eye.L"]
+  eye2 = ebones["Eye.R"]
+  size = (eye1.head - eye2.head).length
+  
+  ft.head[0] = 0
+  ft.head[1] = eye1.head[1] - size*2
+  ft.head[2] = eye1.head[2]
+  
+  ft.tail = ft.head + Vector([0, 0, size*0.5])
+  
+  bpy.ops.object.mode_set(mode="OBJECT")
+  
+  
+  newrig.data.use_mirror_x = use_mirror_x
+  
+def generateShapeKeyRig(meta, meshob):
+  #genBasePositions(bpy.data.objects["MetaFaceRig"])
+  newrig = genShapeKeyRig(meta)
+  
+  mod = None
+  
+  for md in meshob.modifiers:
+    if md.type == "ARMATURE" and md.object == newrig:
+      md.show_viewport = True
+      mod = md
+    elif md.type == "ARMATURE" and md.object != newrig:
+      md.show_viewport = False
+    
+  if mod is None:
+    mod = meshob.modifiers.new("autorig1", "ARMATURE")
+    mod.object = newrig
 
-
+  bpy.ops.object.select_all(action="DESELECT")
+  meshob.select_set(True)
+  newrig.select_set(True)
+  bpy.context.view_layer.objects.active = newrig
+  
+  bpy.ops.object.parent_set(type="ARMATURE_AUTO", xmirror=False)
+  
+  
