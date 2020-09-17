@@ -28,6 +28,9 @@ bpy.utils.register_class(ModelSwapper)
   
 class FaceRigProps (bpy.types.PropertyGroup):
   teeth_models : PointerProperty(type=ModelSwapper)
+  meshob : PointerProperty(type=bpy.types.Object)
+  rigname : StringProperty(default="FaceRig")
+  devmode : BoolProperty(default=False)
 
 #XXX unfortunately seems like we can't defer
 #registering this to bpy_exports

@@ -28,7 +28,7 @@ def genBasePositions(meta):
     print("\n", buf, "\n")
     return buf
         
-def deformRig(meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=False):
+def deformRig(scene, meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=False):
     basePositions2 = []
     
     for name, loc0 in basePositions:
@@ -40,8 +40,11 @@ def deformRig(meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=
         
         basePositions2.append((name, loc))
     
-    ob, vimap, inflate = makeDeformMesh(meta, basePositions, "base", oldrig)
-    targetob, targetvimap, targetinflate = makeDeformMesh(meta, basePositions2, "target", oldrig, None)
+    ob, vimap, inflate = makeDeformMesh(scene, meta, basePositions, "base", oldrig)
+    targetob, targetvimap, targetinflate = makeDeformMesh(scene, meta, basePositions2, "target", oldrig, None)
+
+    ob.hide_viewport = False
+    targetob.hide_viewport = False
     
     for i in range(2):
       #i = 1
@@ -66,9 +69,11 @@ def deformRig(meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=
     arm = meta.data
     pose = meta.pose
     
-    defob = getMeshObject("_" + meta.name + "_rigdef")
+    defob = getMeshObject("_" + meta.name + "_rigdef", scene)
     defob.location = meta.location
     defob.select_set(True)
+
+    defob.hide_viewport = False
     
     bm2 = bmesh.new()
     
@@ -351,7 +356,7 @@ def deformRig(meta, newrig, oldrig, do_action=True, margin=0.0, use_surface_def=
     
     ebones = None
     bpy.ops.object.mode_set(mode="OBJECT")
-
+    
     #bpy.ops.object.mode_set(mode="POSE")
     #bpy.context.view_layer.objects.active = defob
     
@@ -554,15 +559,12 @@ def copyRig(rig, name):
     return rig2    
 
 
-def genShapeKeyRig(meta, rest_frame=1):
+def genShapeKeyRig(scene, meta, rest_frame=1, rigname="FaceRig"):
   oldframe = bpy.context.scene.frame_current
   
   internal_rig = bpy.data.objects["InternalFaceRig"]
   
-  name = meta.name
-  if name.lower().startswith("meta"):
-    name = name[4:]
-  name = "MyShapeKey" + name
+  name = rigname + "_skey_gen"
 
   newrig = copyRig(internal_rig, name)
   newrig.location = meta.location
@@ -570,7 +572,7 @@ def genShapeKeyRig(meta, rest_frame=1):
   use_mirror_x = newrig.data.use_mirror_x
   newrig.data.use_mirror_x = False
 
-  deformRig(meta, newrig, internal_rig)
+  deformRig(scene, meta, newrig, internal_rig)
   updateConstraints(newrig, rest_frame=rest_frame)
   
   meta.select_set(True)
@@ -583,13 +585,10 @@ def genShapeKeyRig(meta, rest_frame=1):
   
   return newrig
   
-def generate(meta, meshob):
+def generate(scene, meta, meshob, rigname="FaceRig"):
   base_rig = bpy.data.objects["FaceRigBase"]
       
-  name = meta.name
-  if name.lower().startswith("meta"):
-    name = name[4:]
-  name = "My" + name
+  name = rigname
   
   newrig = copyRig(base_rig, name)
   newrig.location = meta.location
@@ -597,10 +596,8 @@ def generate(meta, meshob):
   use_mirror_x = newrig.data.use_mirror_x
   newrig.data.use_mirror_x = False
 
-  deformRig(meta, newrig, base_rig, do_action=False, margin=0, use_surface_def=True)
+  deformRig(scene, meta, newrig, base_rig, do_action=False, margin=0, use_surface_def=True)
   updateConstraints(newrig, rest_frame=1)
-  
-  
   
   #meta.select_set(True)
   bpy.context.view_layer.objects.active = newrig
@@ -623,13 +620,11 @@ def generate(meta, meshob):
   ft.tail = ft.head + Vector([0, 0, size*0.5])
   
   bpy.ops.object.mode_set(mode="OBJECT")
-  
-  
   newrig.data.use_mirror_x = use_mirror_x
   
-def generateShapeKeyRig(meta, meshob):
+def generateShapeKeyRig(scene, meta, meshob, rigname="FaceRig"):
   #genBasePositions(bpy.data.objects["MetaFaceRig"])
-  newrig = genShapeKeyRig(meta)
+  newrig = genShapeKeyRig(scene, meta, rigname=rigname)
   
   mod = None
   

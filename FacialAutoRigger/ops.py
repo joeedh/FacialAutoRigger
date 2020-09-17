@@ -1,84 +1,13 @@
 import bpy
 from bpy.props import *
 
-from .utils import Registrar
+from .utils import Registrar, decompose_path
 import re
 
-def decompose_path(context, path):
-  
-  #a = path[:path.find(".")]
-  #b = None
-  #path = path[len(a)+1:]
-  
-  nlist = [""]
-  
-  #root = [a, None, ".", None]
-  #node = [a, None, "", None]
-  #word = ""
-  
-  for c in path:
-    if c in ["."]:
-      if len(nlist[-1]) == 0:
-        nlist = nlist[:-1]
-      nlist.append(c)
-      nlist.append("")
-    elif c == "]":
-      #nlist.append(c)
-      nlist.insert(len(nlist)-1, '[')
-      #nlist.append(']')
-      nlist.append("")
-      pass
-    elif c == "[":
-      nlist.append("")
-      #nlist.append("")
-      continue
-    else:
-      nlist[-1] += c
-  
-  #print(nlist)
-  vlist = []
-  trace = []
-  
-  obj = context
-  i = 0
-  while i < len(nlist):
-    if i > 0:
-      prev = nlist[i-1]
-    else:
-      prev = None
-    
-    #print("item", nlist[i])
-    #print("prev", prev)
-    
-    item = nlist[i]
-    
-    trace.append(item)
-    vlist.append(obj)
-    
-    if prev is None or prev == ".":
-      try:
-        obj = getattr(obj, nlist[i])
-      except:
-        obj = None
-    elif prev == "[":
-      if "'" not in item and '"' not in item:
-        item = int(item)
-        
-      try:
-        obj = obj[item]
-      except IndexError:
-        obj = None
-        
-      pass
-    i += 2
-    
-  vlist.append(obj)
-  
-  #obj = getattr(obj, k)
-  #print("vlist", vlist)
-  #print("object", obj)
-  return trace, vlist
-  
+from .shapedrivers import makeShapeDrivers
+from . import rigger
+from . import shapekeys
+
 class AddSwappableMesh(bpy.types.Operator):
     """Tooltip"""
     bl_idname = "object.facerig_add_swappable_mesh"
@@ -251,7 +180,7 @@ def makeSwappableDrivers(basepath, mswap, arm):
       makeSwappableDriver(basepath, mswap, arm, ob, "hide_viewport", i)
       makeSwappableDriver(basepath, mswap, arm, ob, "hide_render", i)
       
-    
+
 class MakeSwappableMeshDrivers(bpy.types.Operator):
     """Tooltip"""
     bl_idname = "object.facerig_make_swap_drivers"
@@ -278,11 +207,105 @@ class MakeSwappableMeshDrivers(bpy.types.Operator):
         
         return {'FINISHED'}
     
+
+class MakeShapeDrivers(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.facerig_make_shape_drivers"
+    bl_label = "Make Shape Drivers"
+    bl_options = {'UNDO'}
     
+    path: StringProperty()
+    flipLeftRight : BoolProperty()
+    
+    @classmethod
+    def poll(cls, context):
+        return context.armature is not None
+
+    def execute(self, context):
+        print("PATHS", self.path)
+        
+        arm = context.armature
+        armob = bpy.context.active_object
+        
+        print("making drivers!", context.active_object, context.armature)
+        makeShapeDrivers(armob, -1.0 if self.flipLeftRight else 1.0);
+        
+        #trace, values = decompose_path(arm, self.path)
+        #mswap = values[-1]
+        
+        #print(trace, values)
+        
+        return {'FINISHED'}
+    
+
+class GenerateShapeKeyRig(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.facerig_gen_shapekey_rig"
+    bl_label = "Make ShapeKey Rig"
+    bl_options = {'UNDO'}
+    
+    path: StringProperty()
+    flipLeftRight : BoolProperty()
+    
+    @classmethod
+    def poll(cls, context):
+      return context.armature is not None and context.armature.facerig.meshob is not None
+      
+    def execute(self, context):
+      facerig = context.armature.facerig
+      rigger.generateShapeKeyRig(context.scene, context.active_object, facerig.meshob, facerig.rigname)
+      
+      return {'FINISHED'}
+   
+class GenerateShapeKeys(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.facerig_gen_shapekeys"
+    bl_label = "Generate ShapeKeys"
+    bl_options = {'UNDO'}
+    
+    path: StringProperty()
+    flipLeftRight : BoolProperty()
+    
+    @classmethod
+    def poll(cls, context):
+        return context.armature is not None
+
+    def execute(self, context):
+        print("PATHS", self.path)
+        
+        
+        return {'FINISHED'}
+    
+   
+class UpdateFinalRig(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.facerig_update_final"
+    bl_label = "Make/Update Final Rig"
+    bl_options = {'UNDO'}
+    
+    path: StringProperty()
+    flipLeftRight : BoolProperty()
+    
+    @classmethod
+    def poll(cls, context):
+        return context.armature is not None
+
+    def execute(self, context):
+        print("PATHS", self.path)
+        
+        
+        return {'FINISHED'}
+    
+   
+
 bpy_exports = Registrar([
   AddSwappableMesh,
   RemSwappableMesh,
   AddSwappableMeshGroup,
   RemSwappableMeshGroup,
-  MakeSwappableMeshDrivers
+  MakeSwappableMeshDrivers,
+  MakeShapeDrivers,
+  UpdateFinalRig,
+  GenerateShapeKeys,
+  GenerateShapeKeyRig
 ])

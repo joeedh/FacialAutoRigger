@@ -78,11 +78,11 @@ def simpleMeshDeformDeform(cagebm, bm, bindcos):
     v.co = mat2 @ loc
     
   
-def testSimpleMeshDeform(rot_fac=1.0, scale_fac=1.0):
+def testSimpleMeshDeform(scene, rot_fac=1.0, scale_fac=1.0):
   import random
   
   bm = bmesh.new()
-  ob = getMeshObject("testSimpleMeshDeform_cage")
+  ob = getMeshObject("testSimpleMeshDeform_cage", scene)
   
   bmesh.ops.create_cube(bm, size=2)
   bm.normal_update();
@@ -91,7 +91,7 @@ def testSimpleMeshDeform(rot_fac=1.0, scale_fac=1.0):
   bmesh.ops.create_monkey(bm2)
   bm2.normal_update();
   
-  ob2 = getMeshObject("testSimpleMeshDeform_deform")
+  ob2 = getMeshObject("testSimpleMeshDeform_deform", scene)
   
   eul = Euler([rot_fac*random.random()*pi*2, rot_fac*random.random()*pi*2, rot_fac*random.random()*pi*2])
   rmat = eul.to_matrix()
@@ -120,8 +120,8 @@ def testSimpleMeshDeform(rot_fac=1.0, scale_fac=1.0):
 def fixCage(bm, inside_points, eps=0.001):
   bvh = BVHTree.FromBMesh(bm, eps)
   
-def makeDeformMeshExperiment(meta, basePositions, prefix, internal_rig):
-  ob = getMeshObject(prefix + "_" + meta.name + "cage")
+def makeDeformMeshExperiment(scene, meta, basePositions, prefix, internal_rig):
+  ob = getMeshObject(prefix + "_" + meta.name + "cage", scene)
 
   ob.location = meta.matrix_world @ Vector()
 
@@ -202,8 +202,8 @@ def makeDeformMeshExperiment(meta, basePositions, prefix, internal_rig):
 
   return ob, vmap, eps
 
-def makeDeformMesh(meta, basePositions, prefix, internal_rig, inflate=None):
-    ob = getMeshObject(prefix + "_" + meta.name + "cage")
+def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=None):
+    ob = getMeshObject(prefix + "_" + meta.name + "cage", scene)
     
     ob.location = meta.matrix_world @ Vector()
     

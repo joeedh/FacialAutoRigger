@@ -1,17 +1,18 @@
 import imp
 
 from . import ops, ui, rigger, props, utils, shapekeys, data, cage
-from . import spline
+from . import spline, shapedrivers
 
 imp.reload(data)
 imp.reload(utils)
 imp.reload(spline)
 imp.reload(props)
 imp.reload(cage)
-imp.reload(ops)
+imp.reload(shapedrivers)
 imp.reload(ui)
 imp.reload(rigger)
 imp.reload(shapekeys)
+imp.reload(ops)
 
 from .utils import Registrar
 

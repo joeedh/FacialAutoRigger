@@ -3,6 +3,82 @@ from mathutils import *
 from math import *
 import bpy
 
+
+def decompose_path(context, path):
+  
+  #a = path[:path.find(".")]
+  #b = None
+  #path = path[len(a)+1:]
+  
+  nlist = [""]
+  
+  #root = [a, None, ".", None]
+  #node = [a, None, "", None]
+  #word = ""
+  
+  for c in path:
+    if c in ["."]:
+      if len(nlist[-1]) == 0:
+        nlist = nlist[:-1]
+      nlist.append(c)
+      nlist.append("")
+    elif c == "]":
+      #nlist.append(c)
+      nlist.insert(len(nlist)-1, '[')
+      #nlist.append(']')
+      nlist.append("")
+      pass
+    elif c == "[":
+      nlist.append("")
+      #nlist.append("")
+      continue
+    else:
+      nlist[-1] += c
+  
+  #print(nlist)
+  vlist = []
+  trace = []
+  
+  obj = context
+  i = 0
+  while i < len(nlist):
+    if i > 0:
+      prev = nlist[i-1]
+    else:
+      prev = None
+    
+    #print("item", nlist[i])
+    #print("prev", prev)
+    
+    item = nlist[i]
+    
+    trace.append(item)
+    vlist.append(obj)
+    
+    if prev is None or prev == ".":
+      try:
+        obj = getattr(obj, nlist[i])
+      except:
+        obj = None
+    elif prev == "[":
+      if "'" not in item and '"' not in item:
+        item = int(item)
+        
+      try:
+        obj = obj[item]
+      except IndexError:
+        obj = None
+        
+      pass
+    i += 2
+    
+  vlist.append(obj)
+  
+  #obj = getattr(obj, k)
+  #print("vlist", vlist)
+  #print("object", obj)
+  return trace, vlist
+  
 class DagNode:
   def __init__(self, name):
     self.name = name
@@ -84,13 +160,19 @@ def DAGSortBones(armob):
   
   return sortlist
   
-def getMeshObject(name):
+def getMeshObject(name, scene):
+    print("NAME", name)
+    
     if name not in bpy.data.objects:
         ob = bpy.data.objects.new(name, bpy.data.meshes.new(name))
         cll = bpy.context.scene.collection
         cll.objects.link(ob)
-
-    return bpy.data.objects[name]
+    
+    ob = bpy.data.objects[name]
+    if ob.name not in scene.objects:
+      scene.collection.objects.link(ob)
+      print("OB " + name + " is NOT IN SCENE! adding...");
+    return ob
     
 def setWidgetShapes(ob):
     widget = bpy.data.objects["MetaFaceWidget"]

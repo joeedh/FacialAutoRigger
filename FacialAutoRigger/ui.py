@@ -19,12 +19,21 @@ def drawSwappableList(layout, context, prop):
   
   col = layout.column()
   
-  op = col.operator("object.facerig_make_swap_drivers", text="Gen Drivers")
+  col.prop(arm.facerig, "meshob", text="Model");
+  col.prop(arm.facerig, "rigname", text="Rig Name");
+  col.prop(arm.facerig, "devmode", text="DevMode");
+  
+  op = col.operator("object.facerig_gen_shapekey_rig");
+  op = col.operator("object.facerig_gen_shapekeys");
+  op = col.operator("object.facerig_update_final");  
+  op = col.operator("object.facerig_make_shape_drivers")
+
+  op = col.operator("object.facerig_make_swap_drivers", text="Make Swap Drivers")
   op.path = "facerig." + prop
-  
-  
+    
   row = col.row()
   row.alignment = "LEFT"
+
   op = row.operator("object.facerig_add_swappable_mesh_group", text="+")
   op.path = "facerig." + prop
   
