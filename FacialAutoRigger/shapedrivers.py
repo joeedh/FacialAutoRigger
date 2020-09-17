@@ -29,6 +29,10 @@ def makeShapeDrivers(ob, LR_sign=1):
   base = "key_blocks["
   anim = meshob.data.shape_keys.animation_data
   
+  if anim is None:
+    meshob.data.shape_keys.animation_data_create()
+    anim = meshob.data.shape_keys.animation_data
+    
   def findOrMakeVar(fc, name, target):
     var = None
     for v in fc.driver.variables:

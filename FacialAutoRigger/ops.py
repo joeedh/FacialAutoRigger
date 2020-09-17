@@ -271,10 +271,15 @@ class GenerateShapeKeys(bpy.types.Operator):
         return context.armature is not None
 
     def execute(self, context):
-        print("PATHS", self.path)
+      facerig = context.armature.facerig
+      scene = context.scene 
+
+      dgraph = context.evaluated_depsgraph_get()
+      shapekeys.generate_shapekey_masks(facerig.meshob, dgraph, scene)
+      shapekeys.generate_facial_rig(facerig.meshob, dgraph, scene)
+            
         
-        
-        return {'FINISHED'}
+      return {'FINISHED'}
     
    
 class UpdateFinalRig(bpy.types.Operator):
@@ -291,10 +296,10 @@ class UpdateFinalRig(bpy.types.Operator):
         return context.armature is not None
 
     def execute(self, context):
-        print("PATHS", self.path)
+      facerig = context.armature.facerig
+      rigger.generate(context.scene, context.active_object, facerig.meshob, facerig.rigname)
         
-        
-        return {'FINISHED'}
+      return {'FINISHED'}
     
    
 
