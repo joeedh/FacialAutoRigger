@@ -1,10 +1,11 @@
 import imp
 
 from . import ops, ui, rigger, props, utils, shapekeys, data, cage
-from . import spline, shapedrivers
+from . import spline, shapedrivers, serializer
 
 imp.reload(data)
 imp.reload(utils)
+imp.reload(serializer)
 imp.reload(spline)
 imp.reload(props)
 imp.reload(cage)

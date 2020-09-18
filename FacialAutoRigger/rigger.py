@@ -562,7 +562,7 @@ def copyRig(rig, name):
 def genShapeKeyRig(scene, meta, rest_frame=1, rigname="FaceRig"):
   oldframe = bpy.context.scene.frame_current
   
-  internal_rig = bpy.data.objects["InternalFaceRig"]
+  internal_rig = bpy.data.objects["_autorig_InternalFaceRig"]
   
   name = rigname + "_skey_gen"
 
@@ -586,7 +586,7 @@ def genShapeKeyRig(scene, meta, rest_frame=1, rigname="FaceRig"):
   return newrig
   
 def generate(scene, meta, meshob, rigname="FaceRig"):
-  base_rig = bpy.data.objects["FaceRigBase"]
+  base_rig = bpy.data.objects["_autorig_FaceRigBase"]
       
   name = rigname
   
@@ -626,7 +626,7 @@ def generate(scene, meta, meshob, rigname="FaceRig"):
   newrig.data.use_mirror_x = use_mirror_x
   
 def generateShapeKeyRig(scene, meta, meshob, rigname="FaceRig"):
-  #genBasePositions(bpy.data.objects["MetaFaceRig"])
+  #genBasePositions(bpy.data.objects["_autorig_MetaFaceRig"])
   newrig = genShapeKeyRig(scene, meta, rigname=rigname)
   
   mod = None
@@ -648,5 +648,4 @@ def generateShapeKeyRig(scene, meta, meshob, rigname="FaceRig"):
   bpy.context.view_layer.objects.active = newrig
   
   bpy.ops.object.parent_set(type="ARMATURE_AUTO", xmirror=False)
-  
   

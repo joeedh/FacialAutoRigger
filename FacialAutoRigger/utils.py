@@ -3,7 +3,61 @@ from mathutils import *
 from math import *
 import bpy
 
+def saveBpyContext(ctx=None):
+  ctx = bpy.context if ctx is None else ctx
+  
+  def idref(id):
+    return id.name if id is not None else None
+    
+  def modesave(ob):
+    return ob.mode if ob is not None else None
+    
+  ret = {}
+  if ctx.active_object is not None:
+    ret["active_object"] = [ctx.active_object.name, ctx.active_object.mode]
+  else:
+    ret["active_object"] = None
+    
+  ret["scene"] = idref(ctx.scene)
+  sel = ret["selected_objects"] = []
+  
+  for ob in ctx.selected_objects:
+    sel.append([idref(ob), ob.mode])
+  
+  return ret
 
+def ensureObjectMode(ctx=None):
+  ctx = bpy.context if ctx is None else ctx
+  
+  if ctx.active_object and ctx.active_object.mode != "OBJECT":
+    bpy.ops.object.mode_set(mode="OBJECT")
+    
+def loadBpyContext(rctx, ctx=None):
+  ctx = bpy.context if ctx is None else ctx
+  
+  ensureObjectMode(ctx)
+  bpy.ops.object.select_all(action="DESELECT")
+  
+  mode = "OBJECT"
+  
+  for obname, mode2 in rctx["selected_objects"]:
+    ob = bpy.data.objects[obname]
+    if not ob: continue
+    
+    ob.select_set(True)
+    mode = mode2
+  
+  if rctx["active_object"]:
+    obname, mode = rctx["active_object"]
+    print(obname)
+    
+    ob = bpy.data.objects[obname]
+    if ob:
+      ctx.view_layer.objects.active = ob
+      
+  if mode != "OBJECT":
+    bpy.ops.object.mode_set(mode=mode)
+  
 def decompose_path(context, path):
   
   #a = path[:path.find(".")]
