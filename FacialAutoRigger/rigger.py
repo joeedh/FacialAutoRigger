@@ -593,6 +593,9 @@ def generate(scene, meta, meshob, rigname="FaceRig"):
   newrig = copyRig(base_rig, name)
   newrig.location = meta.location
 
+  newrig.data.facerig.meshob = meta.data.facerig.meshob
+  newrig.data.facerig.rigname = meta.data.facerig.rigname
+  
   use_mirror_x = newrig.data.use_mirror_x
   newrig.data.use_mirror_x = False
 
