@@ -18,18 +18,6 @@ def drawSwappableList(layout, context, prop):
   facerig = arm.facerig
   
   col = layout.column()
-  
-  col.prop(arm.facerig, "meshob", text="Model");
-  col.prop(arm.facerig, "rigname", text="Rig Name");
-  col.prop(arm.facerig, "devmode", text="DevMode");
-  
-  op = col.operator("object.facerig_gen_shapekey_rig");
-  op = col.operator("object.facerig_gen_shapekeys");
-  op = col.operator("object.facerig_update_final");  
-  op = col.operator("object.facerig_make_shape_drivers")
-
-  op = col.operator("object.facerig_make_swap_drivers", text="Make Swap Drivers")
-  op.path = "facerig." + prop
     
   row = col.row()
   row.alignment = "LEFT"
@@ -78,9 +66,31 @@ class DATA_PT_FaceRigPanel(ArmaturePanel):
       ob = context.object
       arm = context.armature
       space = context.space_data
+
+      ob = context.object
+      arm = context.armature
+      space = context.space_data
+      
+      facerig = arm.facerig
+      
+      col = layout.column()
+      
+      col.prop(arm.facerig, "meshob", text="Model");
+      col.prop(arm.facerig, "rigname", text="Rig Name");
+      col.prop(arm.facerig, "devmode", text="DevMode");
+      
+      op = col.operator("object.facerig_gen_shapekey_rig");
+      op = col.operator("object.facerig_gen_shapekeys");
+      op = col.operator("object.facerig_gen_vgroups");
+      op = col.operator("object.facerig_update_final");  
+      op = col.operator("object.facerig_make_shape_drivers")
+
+      op = col.operator("object.facerig_make_swap_drivers", text="Make Swap Drivers")
+      op.path = "facerig.teeth_models"
     
-      layout.label(text="Teeth Swap Meshes")
-      drawSwappableList(layout, context, "teeth_models")
+      box = layout.box()
+      box.label(text="Teeth Swap Meshes")
+      drawSwappableList(box, context, "teeth_models")
       
   
 class DATA_PT_FaceRigCtrl(ArmaturePanel):

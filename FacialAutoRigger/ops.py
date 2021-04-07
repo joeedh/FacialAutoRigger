@@ -282,6 +282,29 @@ class GenerateShapeKeys(bpy.types.Operator):
       return {'FINISHED'}
     
    
+class GenerateVGroups(bpy.types.Operator):
+    """Generate Vertex Groups For Shapekeys"""
+    bl_idname = "object.facerig_gen_vgroups"
+    bl_label = "Generate Vertex Groups"
+    bl_options = {'UNDO'}
+    
+    path: StringProperty()
+    flipLeftRight : BoolProperty()
+    
+    @classmethod
+    def poll(cls, context):
+        return context.armature is not None
+
+    def execute(self, context):
+      facerig = context.armature.facerig
+      scene = context.scene 
+
+      dgraph = context.evaluated_depsgraph_get()
+      shapekeys.generate_shapekey_masks(facerig.meshob, dgraph, scene)
+        
+      return {'FINISHED'}
+    
+   
 class UpdateFinalRig(bpy.types.Operator):
     """Tooltip"""
     bl_idname = "object.facerig_update_final"
@@ -312,5 +335,6 @@ bpy_exports = Registrar([
   MakeShapeDrivers,
   UpdateFinalRig,
   GenerateShapeKeys,
-  GenerateShapeKeyRig
+  GenerateShapeKeyRig,
+  GenerateVGroups
 ])

@@ -32,6 +32,11 @@ def ensureObjectMode(ctx=None):
   if ctx.active_object and ctx.active_object.mode != "OBJECT":
     bpy.ops.object.mode_set(mode="OBJECT")
     
+def setActiveOb(ctx, ob, autoSel=True):
+  ctx.view_layer.objects.active = ob
+  if autoSel and not ob.select_get(view_layer=ctx.view_layer):
+    ob.select_set(True)
+
 def loadBpyContext(rctx, ctx=None):
   ctx = bpy.context if ctx is None else ctx
   

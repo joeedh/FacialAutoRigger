@@ -229,6 +229,8 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
     bm = bmesh.new()
     vsmap = {}
     swapside = False
+    fmid2s = [0, 0]
+    fmids = [0, 0]
     
     def bvert(name, no_swap=False):
         if swapside and not no_swap and name.endswith(".R"):
@@ -240,11 +242,23 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
         
         return vsmap[name]
 
-        
+
     bound = [
         Vector([100000, 100000, 100000]),
         -Vector([100000, 100000, 100000]),
     ];
+    
+    #"""
+    bound2 = [
+        Vector([100000, 100000, 100000]),
+        -Vector([100000, 100000, 100000]),
+    ];
+    for bone in meta.pose.bones:
+      loc = bloc(bone)
+      for j in range(3):
+        bound2[0][j] = min(bound[0][j], loc[j])
+        bound2[1][j] = max(bound[1][j], loc[j])
+    #"""
     
     tops = []
     backs = []
@@ -257,83 +271,129 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
         if i == 1:
             bmesh.ops.reverse_faces(bm, faces=bm.faces)
             
-        print(bloc("LidLeft.R"))
         eye = [
-            bvert("LidLeft.R"),
             bvert("LidTop.R"),
-            bvert("LidRight.R"),
-            bvert("LidBottom.R")
+            bvert("LidLeft.T.R"),
+            bvert("LidLeft.B.R"),
+            bvert("LidBottom.R"),
         ]
-        
-        eye.reverse()
+        bm.faces.new([
+            bvert("LidRight.B.R"),
+            bvert("LidRight.T.R"),
+            bvert("LidTop.R"),
+            bvert("LidBottom.R"),
+        ])
         
         bm.faces.new(eye)
         
-        brow = [
-            bvert("BrowRight.R"),
-            bvert("BrowRight.L")
-        ]
+        #brow = [
+        bvert("BrowCorner.R"),
+        bvert("BrowCorner.L")
+        #]
         
         forehead = bvert("Forehead.R")
         
-        if 1:
-            bm.faces.new([
-                bvert("LidTop.R"),
-                bvert("BrowRight.R"),
-                bvert("BrowLeft.R"),
-                bvert("LidLeft.R"),
-
-            ])
-
-        
+        #"""
         bm.faces.new([
-            bvert("LidRight.R"),
-            bvert("BrowRight.R"),
+            bvert("LidTop.R"),
+            #bvert("BrowCorner.R"),
+            bvert("BrowMid.R"),
+            bvert("BrowCenter.R"),
+            bvert("LidLeft.T.R"),
+        ])
+        #"""
+        
+        #"""
+        bm.faces.new([
+            bvert("LidRight.T.R"),
+            bvert("BrowCorner.R"),
+            bvert("BrowMid.R"),
             bvert("LidTop.R"),
         ]);
+        #"""
         
         
         #bm.faces.new([
         #    bvert("Nose"),
         #    bvert("LidBottom.R"),
-        #    bvert("LidLeft.R"),
+        #    bvert("LidLeft.T.R"),
         #])
         
         ear = bvert("Ear.R");
         ear.co[0] *= 1.1;
-        temple = Vector(ear.co)
-        temple[2] = bvert("Forehead.R").co[2]
-        temple = bm.verts.new(temple)
+        
+        temple = bvert("Temple.R")
+        temple.co[2] = (temple.co[2] - bound2[0][2])*1.25 + bound2[0][2];
+        
+        #temple = Vector(ear.co)
+        #temple[2] = bvert("Forehead.R").co[2]
+        #temple = bm.verts.new(temple)
         
         temples.append(temple)
         
+        fmid = bvert("Forehead.R").co*0.5 + bvert("BrowCenter.R").co*0.5;
+        fmid[2] = (fmid[2] - bound2[0][2])*1.05 + bound2[0][2];
+        fmid = bm.verts.new(fmid)
+        
+        fmids[i] = fmid
+        
+        #"""
         bm.faces.new([
-            bvert("BrowRight.R"),
+            #bvert("BrowMid.R"),
+            bvert("BrowCorner.R"),
             temple,
             bvert("Forehead.R"),
-            bvert("BrowLeft.R"),
             ])
+        #"""
         
+        #"""
         bm.faces.new([
-            bvert("LidRight.R"),
-            ear,
-            temple,
-            bvert("BrowRight.R"),
-        ])
-        
-        
-        cheek = Vector(bvert("Jawline.R").co)
-        cheek += (bvert("LidBottom.R").co - cheek)*0.6
-        cheek[0] *= 1.1;
-        cheek = bm.verts.new(cheek)
+            bvert("Forehead.R"),
+            fmid,
+            bvert("BrowCorner.R"),
+        ]);
+        bm.faces.new([
+            bvert("BrowMid.R"),
+            bvert("BrowCorner.R"),
+            fmid,
+        ]);
+        bm.faces.new([
+            bvert("BrowCenter.R"),
+            bvert("BrowMid.R"),
+            fmid,
+        ]);
         #"""
         
         bm.faces.new([
+            bvert("LidRight.T.R"),
+            ear,
+            temple,
+            bvert("BrowCorner.R"),
+        ])
+        
+        
+        cheek = bvert("Cheek.R")
+        
+        #cheek = Vector(bvert("Jawline.R").co)
+        #cheek += (bvert("LidBottom.R").co - cheek)*0.6
+        #cheek[0] *= 1.1;
+        #cheek = bm.verts.new(cheek)
+        
+        #"""
+        bm.faces.new([
             bvert("LidBottom.R"),
             cheek,
-            ear,
-            bvert("LidRight.R"),
-
+            bvert("LidRight.B.R"),
+        ])
+        bm.faces.new([
+          ear,
+          bvert("LidRight.T.R"),
+          bvert("LidRight.B.R"),
+        ])
+        bm.faces.new([
+          ear,
+          bvert("LidRight.B.R"),
+          cheek
         ])
         #"""
             
@@ -349,8 +409,13 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
         bm.faces.new([
             cheek,
             bvert("LidBottom.R"),
-            bvert("LidLeft.R"),
+            bvert("LidLeft.B.R"),
             bvert("Nose"),
+        ])
+        bm.faces.new([
+          bvert("LidLeft.B.R"),
+          bvert("LidLeft.T.R"),
+          bvert("Nose"), 
         ])
         
         #"""
@@ -492,11 +557,22 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
         back6[1] = backy - size[1]*0.25
         back6 = bm.verts.new(back6)
         
+        fmid2 = back6.co*0.5 + bvert("Forehead.R").co*0.5
+        fmid2[2] = (fmid2[2] - bound2[0][2])*1.1 + bound2[0][2]
+        fmid2 = bm.verts.new(fmid2)
+        
+        fmid2s[i] = fmid2
+        
         #"""
         bm.faces.new([
             back6,
+            fmid2,
+            temple,
+        ]);
+        bm.faces.new([
             bvert("Forehead.R"),
             temple,
+            fmid2,
         ]);
         #"""
         
@@ -522,12 +598,22 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
     
     swapside = False
     
+    #"""
     bm.faces.new([
         bvert("Forehead.L"),        
         bvert("Forehead.R"),
+        fmid2s[1],
+        fmid2s[0],
+        #tops[1],
+        #tops[0],
+    ]);
+    bm.faces.new([
+        fmid2s[1],
         tops[1],
         tops[0],
+        fmid2s[0],
     ]);
+    #"""
     
     backmid = bound[0] + Vector([
         size[0],
@@ -623,24 +709,34 @@ def makeDeformMesh(scene, meta, basePositions, prefix, internal_rig, inflate=Non
     #some final middle faces
     #"""
     bm.faces.new([
-        bvert("BrowLeft.L", True),
-        bvert("BrowLeft.R", True),
+        bvert("BrowCenter.L", True),
+        bvert("BrowCenter.R", True),
+        fmids[1],
+        fmids[0],
+        #bvert("Forehead.R", True),
+        #bvert("Forehead.L", True),
+    ])
+    bm.faces.new([
+        fmids[0],
+        fmids[1],
         bvert("Forehead.R", True),
         bvert("Forehead.L", True),
     ])
     #"""
     
+    #"""
     bm.faces.new([
-        bvert("LidLeft.L", True),
-        bvert("LidLeft.R", True),
-        bvert("BrowLeft.R", True),
-        bvert("BrowLeft.L", True),
+        bvert("LidLeft.T.L", True),
+        bvert("LidLeft.T.R", True),
+        bvert("BrowCenter.R", True),
+        bvert("BrowCenter.L", True),
     ])
+    #"""
     
     bm.faces.new([
         bvert("Nose"),
-        bvert("LidLeft.R", True),
-        bvert("LidLeft.L", True),
+        bvert("LidLeft.T.R", True),
+        bvert("LidLeft.T.L", True),
     ]);
     
     #make sure we have everything
