@@ -5,6 +5,8 @@ from math import *
 from .data import basePositions;
 from .utils import getMeshObject, DAGSortBones
 from .cage import makeDeformMesh, simpleMeshDeformBind, simpleMeshDeformDeform
+from .rig_utils import RigMaker
+from .spline import *
 
 def genBasePositions(meta):
     arm = meta.data
@@ -364,7 +366,9 @@ def updateConstraints(newrig, rest_frame=0):
   dgraph = bpy.context.evaluated_depsgraph_get()
   
   #set to rest pose frame
-  bpy.context.scene.frame_set(rest_frame)
+  if rest_frame is not None:
+    bpy.context.scene.frame_set(rest_frame)
+
   #newrig.data.pose_position = "REST"
   newrig.data.update_tag()
   
@@ -501,6 +505,20 @@ def updateConstraints(newrig, rest_frame=0):
     #bpy.data.objects.remove(ob)
     
 
+def ensureRig(name):
+  if name in bpy.data.objects:
+    ob = bpy.data.objects[name]
+    print(ob.name, ob.name not in bpy.context.scene.objects)
+
+    if ob.name not in bpy.context.scene.objects:
+      bpy.context.scene.collection.objects.link(ob)
+    return ob
+  else:
+    ob = bpy.data.objects.new(name, bpy.data.armatures.new(name))
+    bpy.context.scene.collection.objects.link(ob)
+
+    return ob
+
 def copyRig(rig, name):
     #copy rig
     rigob = rig
@@ -584,13 +602,231 @@ def genShapeKeyRig(scene, meta, rest_frame=1, rigname="FaceRig"):
   bpy.context.view_layer.update()
   
   return newrig
-  
+
+"""
+widgets
+EyeWidget : 8
+NoseWidgetShape : 50
+MouthWidget : 15
+TweakShape2 : 200
+NoseWidgetShape2 : 25
+HeadShape2 : 2
+
+"""
 def generate(scene, meta, meshob, rigname="FaceRig"):
-  base_rig = bpy.data.objects["_autorig_FaceRigBase"]
-      
+  if not meta.data.facerig.ismeta:
+    meta = meta.data.facerig.metaob
+    rigname = meta.data.facerig.rigname 
+
   name = rigname
   
-  newrig = copyRig(base_rig, name)
+  newrig = ensureRig(name)
+  print("newrig", newrig, name)
+
+  newrig.data.facerig.metaob = meta
+  newrig.data.facerig.rigname = meta.data.facerig.rigname
+  newrig.data.facerig.ismeta = False
+  newrig.data.facerig.meshob = meta.data.facerig.meshob
+
+  arm = newrig.data
+
+  rigger = RigMaker(newrig, newrig.data, bpy.data.objects["DefWidget"], 1000.0)
+  
+  locs = {}
+  loclist = []
+
+  def interp(a, b, t):
+    return a + (b - a) * t
+
+  for b in meta.pose.bones:
+    b2 = meta.data.bones[b.name]
+    loc = b.matrix_channel @ b2.head
+    locs[b.name] = loc 
+    loclist.append(loc)
+
+    print(b.name, loc)
+
+  print("meta", meta)
+
+  vmin = Vector([1e17, 1e17, 1e17])
+  vmax = Vector([-1e17, -1e17, -1e17])
+  for loc in loclist:
+    for i in range(3):
+      vmin[i] = min(vmin[i], loc[i])
+      vmax[i] = max(vmax[i], loc[i])
+
+  scale = (vmax - vmin).length
+
+  rigger.widgetScale = scale * 0.1
+  rigger.start()
+
+  headhead = Vector([vmax[0]*0.5 + vmin[0]*0.5, vmax[1], vmin[2]])
+  headtail = Vector(headhead)
+  headtail[2] += (vmax[2] - vmin[2])*0.75
+  rigger.getBone("Head", headhead, headtail, layers=0)
+
+  def head():
+    return arm.edit_bones["Head"]
+
+  for side in [".L", ".R"]:
+    metaeye = locs["Eye" + side]
+
+    eye = rigger.getBone("Eye" + side, metaeye, metaeye + Vector([0,0,scale*0.2]))
+    print("eye", eye) 
+    eye.use_deform = False
+    eye.parent = head()
+
+    a = locs["BrowCenter" + side]
+    b = locs["BrowMid" + side]
+    c = locs["BrowCorner" + side]
+
+    ta = locs["LidLeft.T" + side]
+    tb = locs["LidTop" + side]
+    tc = locs["LidRight.T" + side]
+
+    ba = locs["LidLeft.B" + side]
+    bb = locs["LidBottom" + side]
+    bc = locs["LidRight.B" + side]
+
+    eye_r = (ta - metaeye).length
+    
+    def makeChain(name, a, b, c, shape=1.0, isLid=True):
+      dv = shape * (c - a) / 4.0
+
+      spline = ArchLengthSpline3d([
+        [a, a+(b-a)/3.0, b-dv, b],
+        [b, b+dv, c-(c-b)/3.0, c]
+      ])
+      
+      chain = rigger.makeBendyChain(name, 4, spline, side, deflayer=1)
+      
+      ctrl = rigger.getBone(name + "Main" + side, b, b + Vector([0,0,scale*0.05]), widget="default", layers=0).name
+      
+      if isLid:
+        parent = rigger.getBone("MCH-" + name + side, a, c, widget=None, layers=11).name
+        parent = arm.edit_bones[parent]
+        parent.parent = head()
+        parent.use_deform = False
+
+      ctrl = arm.edit_bones[ctrl]
+
+      ctrl.parent = head()
+      ctrl.use_deform = False
+
+      #move a little bit in front of chain to avoid numerical instability
+      ctrl.head += Vector([0, -scale*0.035, 0.0])
+      ctrl.tail += Vector([0, -scale*0.035, 0.0])
+
+      rollaxis = (c - a).cross(ctrl.head - metaeye)
+      rollaxis.normalize()
+
+      if isLid:
+        parent.align_roll(rollaxis)
+        con = rigger.cLockedTrack(parent, ctrl)
+        con.lock_axis = "LOCK_Y"
+        con.track_axis = "TRACK_NEGATIVE_X"
+
+      eye = arm.edit_bones["Eye" + side]
+      
+      for i, bname in enumerate(chain):
+        bone = arm.edit_bones[bname]
+        if isLid:
+          bone.parent = parent
+        else:
+          bone.parent = None
+
+          t = i / (len(chain) - 1)
+          t = t*0.9 + 0.1
+          t = 1.0 - abs(t-0.5)*2.0
+
+          con = rigger.cChildOf(bone, ctrl, inf=t, name="childof_ctrl")
+          con = rigger.cChildOf(bone, head(), inf=1.0-t, name="childof_head")
+
+        if isLid:
+          con = rigger.cLimitDistance(bone, eye, mode="LIMITDIST_ONSURFACE")
+        else:
+          con = rigger.cLimitDistance(bone, eye, mode="LIMITDIST_OUTSIDE")
+          
+        con.distance = 0.0
+
+        rollaxis2 = (bone.head + bone.tail)*0.5 - ctrl.head
+        rollaxis2.normalize()
+
+        bone.align_roll(rollaxis2)
+
+        if not isLid:
+          continue
+
+        #continue
+        bname2 = "DEF-" + bname
+        if bname2 not in arm.edit_bones:
+          continue #last ctrl at end of chain
+        bone2 = arm.edit_bones[bname2]
+
+        rollaxis2 = bone2.head - metaeye
+        bone2.align_roll(rollaxis2)
+
+        con = rigger.cLockedTrack(bone2, "Eye" + side, name="locktomain")
+        con.lock_axis = "LOCK_Y"
+        con.track_axis = "TRACK_NEGATIVE_Z"
+        #not working -> con.use_transform_limit = True
+      
+    makeChain("Brow", a, b, c, isLid=False)
+    makeChain("Lid.T", ta, tb, tc)
+    makeChain("Lid.B", ba, bb, bc)
+    
+    #create blockers
+    vec = locs["Forehead" + side] - locs["BrowCenter" + side]
+    co1 = a + vec*0.25
+    co2 = c + vec*0.25
+
+    blocker = rigger.getBone("DEF-Forehead" + side, co1, co2, layers=12) 
+    blocker.parent = head()
+
+    vec = locs["Cheek" + side] - locs["LidBottom" + side]
+    co1 = ba + vec*0.75
+    co2 = bc + vec*0.75
+
+    blocker = rigger.getBone("DEF-Cheek" + side, co1, co2, layers=12) 
+    blocker.parent = head()
+
+    co1 = interp(locs["JawHinge" + side], locs["LidRight.B" + side], 0.5)
+    co2 = interp(locs["Temple" + side], locs["BrowCorner" + side], 0.5)
+
+    blocker = rigger.getBone("DEF-Temple" + side, co1, co2, layers=12) 
+    blocker.parent = head()
+
+  co1 = locs["BrowCenter.R"]*0.5 + locs["BrowCenter.L"]*0.5
+  co2 = locs["Nose"]
+  blocker = rigger.getBone("DEF-Nose", co1, co2, layers=12)
+  blocker.head[1] += scale*0.04
+  blocker.tail[1] += scale*0.04
+  blocker.parent = head()
+
+  main = (locs["MouthUpper"] + locs["MouthLower"])*0.5
+  main[1] -= scale*0.1
+  main = rigger.getBone("Mouth", main, main+Vector([0,0,scale*0.1]), widget="default", layers=0)
+  main.use_deform = False
+  main.parent = head()
+
+  zip = (locs["MouthUpper"] + locs["MouthLower"])*0.5
+  zip[1] -= scale*0.1
+  zip = rigger.getBone("Zip", zip, zip+Vector([0,0,scale*0.025]), widget="default", layers=0)
+  zip.parent = head()
+
+  bpy.ops.object.mode_set(mode="POSE")
+  rigger.resetDistances()
+
+  updateConstraints(newrig, None)
+  rigger.stop()
+
+  bpy.ops.object.mode_set(mode="POSE")
+  
+  return
+  
+  #base_rig = bpy.data.objects["_autorig_FaceRigBase"]
+
+  #newrig = copyRig(base_rig, name)
   newrig.location = meta.location
 
   newrig.data.facerig.meshob = meta.data.facerig.meshob

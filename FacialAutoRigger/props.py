@@ -30,7 +30,9 @@ class FaceRigProps (bpy.types.PropertyGroup):
   teeth_models : PointerProperty(type=ModelSwapper)
   meshob : PointerProperty(type=bpy.types.Object)
   rigname : StringProperty(default="FaceRig")
+  metaob : PointerProperty(type=bpy.types.Object)
   devmode : BoolProperty(default=False)
+  ismeta : BoolProperty(default=True)
 
 #XXX unfortunately seems like we can't defer
 #registering this to bpy_exports

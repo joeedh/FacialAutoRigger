@@ -430,8 +430,6 @@ class ArcLengthBez3d:
       table[j][2] += pz
       tots[j] += 1.0
 
-      print(s, t, j)
-
       ds = dslist[i]
       s += ds
       t += dt
@@ -517,10 +515,13 @@ class ArchLengthSpline3d:
   def __init__(self, curves=[]):
     self.curves = []
     self.regen = 1
+    self.length = 0
 
     for c in curves:
       self.addCurve(c)
-  
+
+    self.update()
+
   def render(self, bm, steps=64):
     s = 0
     self.checkUpdate()
@@ -561,10 +562,12 @@ class ArchLengthSpline3d:
       self.update()
 
   def getCurve(self, s):
+    lastc = None
     for c in self.curves:
-      if c.s <= s:
-        c.checkUpdate()
-        return c
+      if lastc and c.s >= s:
+        lastc.checkUpdate()
+        return lastc
+      lastc = c
     
     if self.curves[-1]:
       self.curves[-1].checkUpdate()
